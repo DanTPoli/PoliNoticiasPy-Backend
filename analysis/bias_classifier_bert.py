@@ -1,4 +1,9 @@
+import sys
 import os
+
+# Garante que o Python encontre os módulos na pasta raiz
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import numpy as np
 import torch 
 from transformers import AutoModel, AutoTokenizer
@@ -6,6 +11,7 @@ from pymongo import MongoClient
 from dotenv import load_dotenv
 from sklearn.metrics.pairwise import cosine_similarity
 
+# Carrega configurações
 load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI") 
 DB_NAME = "polinoticias_db"
@@ -13,80 +19,130 @@ COLLECTION_RAW = "noticias_raw"
 
 # Modelo base BERTimbau
 MODEL_NAME = 'neuralmind/bert-base-portuguese-cased' 
+
+print(f"Carregando modelo {MODEL_NAME}...")
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModel.from_pretrained(MODEL_NAME)
 
-# VETORES DE VIÉS (Polaridade)
-# Com textos mais ricos, a comparação semântica fica mais precisa.
+# --- 1. VIÉS DE REPUTAÇÃO (Ponto de Partida) ---
+SOURCE_BIAS_MAP = {
+    "Carta Capital": -2.5,
+    "Revista Piauí": -1.5,
+    "Folha de S.Paulo": -0.8,
+    "BBC Brasil": -0.2, 
+    "Metrópoles": 0.0,
+    "Correio Braziliense": 0.0,
+    "Reuters": 0.0,
+    "O Globo": 0.3,
+    "CNN Brasil": 0.5,
+    "Estadão": 1.0, 
+    "Veja": 1.0,
+    "Gazeta do Povo": 2.5
+}
+
+# --- 2. ÂNCORAS SEMÂNTICAS (Conceitos) ---
 POLARITY_PHRASES = {
-    "direita": ["Bolsonaro livre mercado capitalista individualismo conservadorismo família", "redução de impostos estado mínimo privatização segurança pública"],
-    "esquerda": ["Lula reforma agrária direitos sociais estado forte progressismo igualdade", "taxação de grandes fortunas investimento público justiça social"]
+    "direita": [
+        "defesa do livre mercado estado mínimo e privatizações",
+        "redução de impostos e desburocratização para empresas",
+        "responsabilidade fiscal teto de gastos e meritocracia",
+        "crítica ao assistencialismo e defesa do empreendedorismo",
+        "defesa da família tradicional e valores cristãos",
+        "segurança pública rigorosa armamento e combate ao crime",
+        "patriotismo e soberania nacional contra globalismo",
+        "liberdade religiosa e oposição ao aborto"
+    ],
+    "esquerda": [
+        "fortalecimento do estado e serviços públicos estatais",
+        "distribuição de renda e taxação de grandes fortunas",
+        "direitos trabalhistas e valorização do salário mínimo",
+        "reforma agrária e função social da propriedade",
+        "defesa dos direitos humanos e minorias sociais",
+        "políticas de inclusão diversidade e cotas raciais",
+        "proteção ambiental e demarcação de terras indígenas",
+        "descriminalização das drogas e estado laico"
+    ]
 }
 
 def get_text_embedding(text):
-    """Gera o embedding (vetor) para um texto usando BERTimbau."""
+    """Gera o embedding para o texto completo (512 tokens)."""
     with torch.no_grad():
-        # --- ATUALIZAÇÃO CRÍTICA ---
-        # Aumentamos max_length para 512 para ler o parágrafo inteiro coletado.
         encoded_input = tokenizer(text, padding=True, truncation=True, return_tensors='pt', max_length=512)
         model_output = model(**encoded_input)
-        return model_output.last_hidden_state[0, 0, :].numpy().reshape(1, -1)
+        return torch.mean(model_output.last_hidden_state, dim=1).numpy()
 
-# Pré-calcula os embeddings das frases polares
+# Pré-cálculo dos arquétipos
+print("Gerando vetores de referência ideológica...")
 POLARITY_EMBEDDINGS = {}
 for key, phrases in POLARITY_PHRASES.items():
     embeddings = [get_text_embedding(p) for p in phrases]
     POLARITY_EMBEDDINGS[key] = np.mean(embeddings, axis=0) 
 
-def classificar_vies_bert(text):
-    """Classifica o viés comparando o texto completo com os vetores polares."""
+def classificar_vies_bert(text, nome_fonte):
+    """
+    Calcula o viés usando Média Ponderada: 60% Análise do Texto (IA) + 40% Histórico da Fonte.
+    """
+    if not text: return 0.0
+    
+    # A. Análise do Texto (Dinâmica)
     text_embedding = get_text_embedding(text)
+    sim_dir = cosine_similarity(text_embedding, POLARITY_EMBEDDINGS["direita"])[0][0]
+    sim_esq = cosine_similarity(text_embedding, POLARITY_EMBEDDINGS["esquerda"])[0][0]
     
-    similarity_direita = cosine_similarity(text_embedding, POLARITY_EMBEDDINGS["direita"])[0][0]
-    similarity_esquerda = cosine_similarity(text_embedding, POLARITY_EMBEDDINGS["esquerda"])[0][0]
+    raw_diff = sim_dir - sim_esq
     
-    bias_diff = similarity_direita - similarity_esquerda
+    # Amplificação e Clamping
+    ai_score = raw_diff * 20 
+    ai_score = max(-3.0, min(3.0, ai_score))
+
+    # B. Viés da Fonte (Estático)
+    source_score = SOURCE_BIAS_MAP.get(nome_fonte, 0.0)
     
-    # Limiares ajustados para sensibilidade
-    if bias_diff > 0.08: return 3 
-    if bias_diff > 0.03: return 1 
-    if bias_diff < -0.08: return -3 
-    if bias_diff < -0.03: return -1 
-    return 0 
+    # C. Média Ponderada
+    final_score = (ai_score * 0.6) + (source_score * 0.4)
+    
+    # CORREÇÃO DO ERRO: Converter numpy.float para float nativo do Python
+    # O MongoDB não aceita tipos nativos do NumPy
+    return float(round(final_score, 2))
 
 def rodar_classificacao():
-    client = MongoClient(MONGO_URI)
-    db = client[DB_NAME]
-    raw_collection = db[COLLECTION_RAW]
-    
-    # Busca notícias que têm cluster mas ainda não têm viés
-    noticias_para_classificar = list(raw_collection.find({
-        "id_cluster": {"$ne": None}, 
-        "viés_classificado": None      
-    }))
-    
-    if not noticias_para_classificar:
-        print("Nenhuma notícia nova para classificar.")
-        client.close()
+    if not MONGO_URI: 
+        print("Erro: MONGO_URI não configurada.")
         return
 
-    print(f"Iniciando classificação profunda em {len(noticias_para_classificar)} notícias...")
-    
-    for noticia in noticias_para_classificar:
-        # Garante que usa o texto rico (se disponível) ou o título como fallback
-        texto_completo = noticia.get('texto_analise_ia', noticia.get('titulo', ''))
+    try:
+        client = MongoClient(MONGO_URI)
+        db = client[DB_NAME]
+        raw_collection = db[COLLECTION_RAW]
         
-        if not texto_completo: continue
+        noticias = list(raw_collection.find({}))
+        
+        if not noticias:
+            print("Nenhuma notícia para classificar.")
+            client.close()
+            return
 
-        bias_score = classificar_vies_bert(texto_completo)
+        print(f"Recalculando viés de {len(noticias)} notícias (Modelo Híbrido)...")
         
-        raw_collection.update_one(
-            {"_id": noticia['_id']},
-            {"$set": {"viés_classificado": bias_score}}
-        )
-        
-    print("Classificação de viés concluída!")
-    client.close()
+        updates = 0
+        for n in noticias:
+            texto_completo = n.get('texto_analise_ia', n.get('titulo', ''))
+            nome_fonte = n.get('nome_fonte', '')
+            
+            if texto_completo:
+                score = classificar_vies_bert(texto_completo, nome_fonte)
+                
+                raw_collection.update_one(
+                    {"_id": n['_id']}, 
+                    {"$set": {"viés_classificado": score}}
+                )
+                updates += 1
+                
+        print(f"Classificação concluída. {updates} notícias atualizadas.")
+        client.close()
+
+    except Exception as e:
+        print(f"❌ Erro na classificação: {e}")
 
 if __name__ == '__main__':
     rodar_classificacao()
