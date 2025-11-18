@@ -1,0 +1,10 @@
+# Arquivos do Ambiente Python
+venv-portal/
+__pycache__/
+*.pyc
+
+# Arquivos de Chave Secreta
+.env  # OBRIGATÓRIO: Contém a MONGO_URI
+
+# Arquivos do Playwright
+/ms-playwright/
