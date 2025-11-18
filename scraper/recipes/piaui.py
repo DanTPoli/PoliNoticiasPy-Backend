@@ -1,12 +1,12 @@
-# scraper/recipes/piaui.py
-
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
+# Importa a função que lê o conteúdo real da página
+from scraper.content_extractor import extrair_primeiro_paragrafo
 
 def coletar_piaui():
     """
-    Coleta notícias da Revista Piauí (Homepage/Artigos mais recentes).
+    Coleta notícias da Revista Piauí com Deep Scraping (lê o conteúdo do link).
     Ajustado para os seletores exatos fornecidos (main__noticia).
     """
     BASE_URL = "https://piaui.folha.uol.com.br/" 
@@ -18,28 +18,34 @@ def coletar_piaui():
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
 
-        # 1. IDENTIFICANDO OS BLOCOS CHAVE: O container <div class="main__noticia">
-        # Buscamos por todas as tags que tenham a classe 'main__noticia'
+        # 1. IDENTIFICANDO OS BLOCOS CHAVE
         blocos_noticia = soup.find_all('div', class_=lambda c: c and 'main__noticia' in c) 
 
+        count = 0
+
         for bloco in blocos_noticia:
-            # O link, título e resumo estão no bloco de info
+            if count >= 8: break
+
             info_div = bloco.find('div', class_='main__noticia--destaque--info')
             
-            # 2. EXTRAINDO LINK, TÍTULO E RESUMO
-            # O link é o 'href' da tag <a> que encapsula o título
             titulo_tag = info_div.find('h2', class_='main__noticia--destaque--title') if info_div else None
             link_tag = titulo_tag.find_parent('a', href=True) if titulo_tag else None
-            
             resumo_tag = info_div.find('p', class_='main__noticia--desc') if info_div else None
 
             if link_tag and titulo_tag:
                 link = link_tag.get('href')
                 titulo = titulo_tag.text.strip()
                 
-                # Resumo para a IA e Agrupamento
-                resumo = resumo_tag.text.strip() if resumo_tag else ""
-                texto_analise_ia = f"{titulo}. {resumo}"
+                # --- DEEP SCRAPING ---
+                print(f"   [Piauí] Lendo conteúdo: {titulo[:30]}...")
+                conteudo_real = extrair_primeiro_paragrafo(link)
+
+                if conteudo_real:
+                    texto_analise_ia = f"{titulo}. {conteudo_real}"
+                else:
+                    # Fallback: usa o resumo da capa
+                    resumo = resumo_tag.text.strip() if resumo_tag else ""
+                    texto_analise_ia = f"{titulo}. {resumo}"
                 
                 noticias_coletadas.append({
                     "nome_fonte": "Revista Piauí",
@@ -50,8 +56,9 @@ def coletar_piaui():
                     "id_cluster": None,
                     "data_coleta": datetime.now().isoformat()
                 })
+                count += 1
         
-        print(f"Revista Piauí: {len(noticias_coletadas)} notícias coletadas.")
+        print(f"Revista Piauí: {len(noticias_coletadas)} notícias coletadas com conteúdo profundo.")
         return noticias_coletadas
 
     except requests.RequestException as e:

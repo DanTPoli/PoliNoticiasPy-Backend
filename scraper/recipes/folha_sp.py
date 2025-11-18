@@ -1,15 +1,14 @@
-# scraper/recipes/folha_sp.py
-
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
+# Importa a função que lê o conteúdo real da página
+from scraper.content_extractor import extrair_primeiro_paragrafo
 
 def coletar_folha_sp():
     """
-    Coleta notícias da Folha de S.Paulo usando o método requests/BeautifulSoup,
-    o que é possível pois o conteúdo é carregado estaticamente.
+    Coleta notícias da Folha de S.Paulo com Deep Scraping (lê o conteúdo do link).
     """
-    BASE_URL = "https://www1.folha.uol.com.br/poder/" # Seção de Política/Poder
+    BASE_URL = "https://www1.folha.uol.com.br/poder/" 
     HEADERS = {'User-Agent': 'Mozilla/5.0'}
     noticias_coletadas = []
     
@@ -19,10 +18,13 @@ def coletar_folha_sp():
         soup = BeautifulSoup(response.content, 'html.parser')
 
         # 1. IDENTIFICANDO OS BLOCOS CHAVE
-        # O bloco que contém o título, o resumo e o link.
         blocos_noticia = soup.find_all('div', class_='c-headline__content') 
 
+        count = 0
+        
         for bloco in blocos_noticia:
+            if count >= 10: break # Limite de segurança
+
             link_tag = bloco.find('a', class_='c-headline__url')
             titulo_tag = bloco.find('h2', class_='c-headline__title')
             resumo_tag = bloco.find('p', class_='c-headline__standfirst') 
@@ -31,11 +33,16 @@ def coletar_folha_sp():
                 link = link_tag.get('href')
                 titulo = titulo_tag.text.strip()
                 
-                # Resumo para a IA e Agrupamento
-                resumo = resumo_tag.text.strip() if resumo_tag else ""
-                
-                # Juntamos título e resumo. Isso é o 'Texto para Análise de Viés'.
-                texto_analise_ia = f"{titulo}. {resumo}"
+                # --- DEEP SCRAPING ---
+                print(f"   [Folha] Lendo conteúdo: {titulo[:30]}...")
+                conteudo_real = extrair_primeiro_paragrafo(link)
+
+                if conteudo_real:
+                    texto_analise_ia = f"{titulo}. {conteudo_real}"
+                else:
+                    # Fallback: Usa o resumo da capa se não conseguir ler o artigo
+                    resumo = resumo_tag.text.strip() if resumo_tag else ""
+                    texto_analise_ia = f"{titulo}. {resumo}"
                 
                 noticias_coletadas.append({
                     "nome_fonte": "Folha de S.Paulo",
@@ -46,8 +53,9 @@ def coletar_folha_sp():
                     "id_cluster": None,
                     "data_coleta": datetime.now().isoformat()
                 })
+                count += 1
         
-        print(f"Folha de S.Paulo: {len(noticias_coletadas)} notícias coletadas.")
+        print(f"Folha de S.Paulo: {len(noticias_coletadas)} notícias coletadas com conteúdo profundo.")
         return noticias_coletadas
 
     except requests.RequestException as e:
@@ -56,8 +64,3 @@ def coletar_folha_sp():
     except Exception as e:
         print(f"Erro inesperado no scraping da Folha: {e}")
         return []
-
-if __name__ == '__main__':
-    dados_folha = coletar_folha_sp()
-    for item in dados_folha:
-        print(f"Título: {item['titulo']} | Resumo: {item['texto_analise_ia']}")

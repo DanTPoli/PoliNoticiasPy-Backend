@@ -1,16 +1,16 @@
-# scraper/recipes/o_globo.py
-
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
+# Importa a função que lê o conteúdo real da página
+from scraper.content_extractor import extrair_primeiro_paragrafo
 
 def coletar_o_globo():
     """
-    Coleta notícias de O Globo (Seção COP 30 Amazônia).
-    Ajustado para os seletores exatos fornecidos.
+    Coleta notícias de O Globo com Deep Scraping (lê o conteúdo do link).
+    Ajustado para os seletores da seção fornecida.
     """
-    # URL da seção COP 30 Amazônia (como no seu HTML)
-    BASE_URL = "https://oglobo.globo.com/brasil/cop-30-amazonia/" 
+    # URL da seção (mantendo a que você estava usando)
+    BASE_URL = "https://oglobo.globo.com/politica/" 
     HEADERS = {'User-Agent': 'Mozilla/5.0'}
     noticias_coletadas = []
     
@@ -19,25 +19,33 @@ def coletar_o_globo():
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
 
-        # 1. IDENTIFICANDO OS BLOCOS CHAVE: O container de cada matéria
+        # 1. IDENTIFICANDO OS BLOCOS CHAVE
         blocos_noticia = soup.find_all('div', class_='feed-post bstn-item-shape type-materia') 
 
+        count = 0
+
         for bloco in blocos_noticia:
-            # O link e o título estão na tag <h2>
+            if count >= 10: break
+
+            # 2. EXTRAINDO LINK E TÍTULO
             link_tag = bloco.find('a', class_='feed-post-link')
             titulo_tag = bloco.find('h2', class_='feed-post-link')
-            
-            # O resumo para o texto de análise (muito importante para a IA)
             resumo_tag = bloco.find('p', class_='feed-post-body-resumo')
 
             if link_tag and titulo_tag:
                 link = link_tag.get('href')
                 titulo = titulo_tag.text.strip()
                 
-                # Resumo para a IA e Agrupamento
-                resumo = resumo_tag.text.strip() if resumo_tag else ""
-                # O texto para análise de viés será a junção de Título e Resumo
-                texto_analise_ia = f"{titulo}. {resumo}"
+                # --- DEEP SCRAPING ---
+                print(f"   [O Globo] Lendo conteúdo: {titulo[:30]}...")
+                conteudo_real = extrair_primeiro_paragrafo(link)
+
+                if conteudo_real:
+                    texto_analise_ia = f"{titulo}. {conteudo_real}"
+                else:
+                    # Fallback: usa o resumo da capa
+                    resumo = resumo_tag.text.strip() if resumo_tag else ""
+                    texto_analise_ia = f"{titulo}. {resumo}"
                 
                 noticias_coletadas.append({
                     "nome_fonte": "O Globo",
@@ -48,8 +56,9 @@ def coletar_o_globo():
                     "id_cluster": None,
                     "data_coleta": datetime.now().isoformat()
                 })
+                count += 1
         
-        print(f"O Globo: {len(noticias_coletadas)} notícias coletadas.")
+        print(f"O Globo: {len(noticias_coletadas)} notícias coletadas com conteúdo profundo.")
         return noticias_coletadas
 
     except requests.RequestException as e:

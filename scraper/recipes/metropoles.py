@@ -1,12 +1,12 @@
-# scraper/recipes/metropoles.py
-
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
+# Importa a função que lê o conteúdo real da página
+from scraper.content_extractor import extrair_primeiro_paragrafo
 
 def coletar_metropoles():
     """
-    Coleta notícias do Metrópoles (Seção Brasil).
+    Coleta notícias do Metrópoles (Seção Brasil) com Deep Scraping.
     Ajustado para os seletores exatos fornecidos (NoticiaWrapper).
     """
     # URL da seção Brasil
@@ -20,10 +20,14 @@ def coletar_metropoles():
         soup = BeautifulSoup(response.content, 'html.parser')
 
         # 1. IDENTIFICANDO OS BLOCOS CHAVE: O container <article> principal
-        # Usamos uma classe parcial para maior estabilidade, se necessário, ou a classe mais específica.
+        # Usamos uma classe parcial para maior estabilidade
         blocos_noticia = soup.find_all('article', class_=lambda c: c and 'NoticiaWrapper__Article' in c) 
 
+        count = 0
+
         for bloco in blocos_noticia:
+            if count >= 8: break
+
             # 2. EXTRAINDO LINK, TÍTULO E RESUMO
             # O link está no <a> dentro do <h4>
             titulo_tag = bloco.find('h4', class_=lambda c: c and 'noticia__titulo' in c)
@@ -37,9 +41,16 @@ def coletar_metropoles():
                 link = link_tag.get('href')
                 titulo = titulo_tag.text.strip()
                 
-                # Resumo para a IA e Agrupamento
-                resumo = resumo_tag.text.strip() if resumo_tag else ""
-                texto_analise_ia = f"{titulo}. {resumo}"
+                # --- DEEP SCRAPING ---
+                print(f"   [Metrópoles] Lendo conteúdo: {titulo[:30]}...")
+                conteudo_real = extrair_primeiro_paragrafo(link)
+
+                if conteudo_real:
+                    texto_analise_ia = f"{titulo}. {conteudo_real}"
+                else:
+                    # Fallback: usa o resumo da capa
+                    resumo = resumo_tag.text.strip() if resumo_tag else ""
+                    texto_analise_ia = f"{titulo}. {resumo}"
                 
                 noticias_coletadas.append({
                     "nome_fonte": "Metrópoles",
@@ -50,8 +61,9 @@ def coletar_metropoles():
                     "id_cluster": None,
                     "data_coleta": datetime.now().isoformat()
                 })
+                count += 1
         
-        print(f"Metrópoles: {len(noticias_coletadas)} notícias coletadas.")
+        print(f"Metrópoles: {len(noticias_coletadas)} notícias coletadas com conteúdo profundo.")
         return noticias_coletadas
 
     except requests.RequestException as e:
