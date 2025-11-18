@@ -4,6 +4,7 @@ from flask import Flask, jsonify
 from pymongo import MongoClient
 from bson.json_util import dumps
 from operator import itemgetter 
+import certifi  # <-- NOVIDADE
 
 # --- 1. CONFIGURAÇÃO DE AMBIENTE E DB ---
 load_dotenv() 
@@ -12,11 +13,17 @@ MONGO_URI = os.getenv("MONGO_URI")
 app = Flask(__name__)
 
 try:
-    client = MongoClient(MONGO_URI)
+    # A CORREÇÃO DO SSL ESTÁ AQUI: O parâmetro tlsCAFile usa o certifi para validar a conexão.
+    client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
+    
     db = client.polinoticias_db 
     noticias_collection = db.noticias_raw
-    print("API: Conectada ao ClusterPoliNoticias com sucesso.")
+    
+    # Testa a conexão logo de cara para falhar rápido se o problema persistir
+    client.admin.command('ping')
+    print("API: Conectada ao ClusterPoliNoticias com sucesso (SSL Seguro).")
 except Exception as e:
+    # Se ainda falhar, o erro SSL será mais informativo ou indicará bloqueio de IP.
     print(f"API: Falha na conexão com o DB! Erro: {e}")
     client = None
     noticias_collection = None
@@ -83,8 +90,7 @@ def get_feed_agrupado():
         
         final_feed = []
         for cluster in feed_agregado:
-            # CORREÇÃO AQUI: Usa lambda para proteger contra 'None' no campo 'vies'
-            # Se vies for None, ele usa 3.0 para colocar o link no final da lista
+            # Proteção contra 'None' na ordenação
             sorted_links = sorted(cluster['links'], key=lambda x: x['vies'] if x['vies'] is not None else 3.0) 
             
             # Encontra o link mais neutro (protegido contra None)
@@ -115,6 +121,7 @@ def get_feed_agrupado():
 
     except Exception as e:
         print(f"Erro na rota /api/feed: {e}")
+        # Retorna erro 500 se algo interno falhar
         return jsonify({"error": "Erro interno ao buscar dados agrupados."}), 500
 
 
