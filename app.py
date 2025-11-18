@@ -1,74 +1,71 @@
 import os
 from dotenv import load_dotenv
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from pymongo import MongoClient
 from bson.json_util import dumps
 from operator import itemgetter 
-import certifi  # <-- NOVIDADE
+import certifi
+import re
 
-# --- 1. CONFIGURAÇÃO DE AMBIENTE E DB ---
+# --- 1. CONFIGURAÇÃO ---
 load_dotenv() 
 MONGO_URI = os.getenv("MONGO_URI") 
 
 app = Flask(__name__)
 
 try:
-    # A CORREÇÃO DO SSL ESTÁ AQUI: O parâmetro tlsCAFile usa o certifi para validar a conexão.
+    # Conexão segura com certificado SSL
     client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
-    
     db = client.polinoticias_db 
     noticias_collection = db.noticias_raw
-    
-    # Testa a conexão logo de cara para falhar rápido se o problema persistir
-    client.admin.command('ping')
-    print("API: Conectada ao ClusterPoliNoticias com sucesso (SSL Seguro).")
+    print("API: Conectada com sucesso.")
 except Exception as e:
-    # Se ainda falhar, o erro SSL será mais informativo ou indicará bloqueio de IP.
-    print(f"API: Falha na conexão com o DB! Erro: {e}")
+    print(f"API: Falha na conexão! {e}")
     client = None
     noticias_collection = None
 
-
-# --- FUNÇÕES DE MÁPEAMENTO (VIÉS TEXTO E PERCENTUAL) ---
-
+# --- FUNÇÕES AUXILIARES ---
 def mapear_viés(viés_num):
-    """Mapeia a classificação numérica média de viés para uma string descritiva (UX)."""
     if viés_num is None: return "Dados Ausentes"
-    if viés_num <= -2.0:
-        return "Extrema-Esquerda"
-    if viés_num <= -1.0:
-        return "Esquerda"
-    if viés_num <= -0.5:
-        return "Centro-Esquerda"
-    if viés_num <= 0.5:
-        return "Centro (Neutro)"
-    if viés_num <= 1.0:
-        return "Centro-Direita"
-    if viés_num <= 2.0:
-        return "Direita"
+    if viés_num <= -2.0: return "Extrema-Esquerda"
+    if viés_num <= -1.0: return "Esquerda"
+    if viés_num <= -0.5: return "Centro-Esquerda"
+    if viés_num <= 0.5: return "Centro"
+    if viés_num <= 1.0: return "Centro-Direita"
+    if viés_num <= 2.0: return "Direita"
     return "Extrema-Direita"
 
 def calcular_posicao_gradiente(viés_num):
-    """Converte a escala de -3 a +3 para a escala de 0 a 100% para o gradiente."""
     if viés_num is None: return 50.0 
-    min_vies = -3.0
-    max_vies = 3.0
-    
+    min_vies, max_vies = -3.0, 3.0
     viés_clamped = max(min_vies, min(max_vies, viés_num))
-    posicao_percentual = ((viés_clamped - min_vies) / (max_vies - min_vies)) * 100
-    
-    return round(posicao_percentual, 1)
+    return round(((viés_clamped - min_vies) / (max_vies - min_vies)) * 100, 1)
 
-
-# --- 2. ROTA DA API PARA O FEED AGRUPADO ---
+# --- ROTA DO FEED ---
 @app.route('/api/feed', methods=['GET'])
 def get_feed_agrupado():
     if noticias_collection is None:
-        return jsonify({"error": "Banco de dados indisponível."}), 500
+        return jsonify({"error": "DB indisponível"}), 500
 
     try:
+        # 1. Captura a categoria da URL (Ex: /api/feed?category=Politica)
+        categoria_filtro = request.args.get('category')
+        
+        # Filtro base: Apenas notícias já processadas (com cluster)
+        match_stage = {"id_cluster": {"$ne": None}}
+
+        # Se houver categoria selecionada (e não for "Todos"), adiciona ao filtro
+        if categoria_filtro and categoria_filtro != "Todos":
+            # Cria uma expressão regular para buscar no título ou categoria (case insensitive)
+            regex = re.compile(categoria_filtro, re.IGNORECASE)
+            match_stage["$or"] = [
+                {"categoria": regex},   # Se o scraper coletou a categoria
+                {"titulo": regex},      # Fallback: procura no título
+                {"texto_analise_ia": regex} # Procura no conteúdo
+            ]
+
         pipeline = [
-            {"$match": {"id_cluster": {"$ne": None}}},
+            {"$match": match_stage}, # Aplica o filtro ANTES de agrupar
             {"$group": {
                 "_id": "$id_cluster",
                 "links": {
@@ -83,48 +80,41 @@ def get_feed_agrupado():
                 "total_links": {"$sum": 1},
                 "media_vies": {"$avg": "$viés_classificado"}
             }},
-            {"$match": {"total_links": {"$gt": 1}}},
+            {"$match": {"total_links": {"$gt": 1}}}, # Garante relevância
         ]
         
         feed_agregado = list(noticias_collection.aggregate(pipeline))
         
         final_feed = []
         for cluster in feed_agregado:
-            # Proteção contra 'None' na ordenação
-            sorted_links = sorted(cluster['links'], key=lambda x: x['vies'] if x['vies'] is not None else 3.0) 
+            # Ordena links internos pelo viés (-3 a +3)
+            sorted_links = sorted(cluster['links'], key=lambda x: x['vies'] if x['vies'] is not None else 0) 
             
-            # Encontra o link mais neutro (protegido contra None)
-            lead_link = min(cluster['links'], key=lambda x: abs(x['vies'] if x['vies'] is not None else 3.0))
+            # Lead neutro (protegido contra None)
+            lead_link = min(cluster['links'], key=lambda x: abs(x['vies'] if x['vies'] is not None else 0))
+
+            # Proteção se media_vies for None
+            media_vies = cluster.get('media_vies', 0) or 0
 
             cluster_data = {
                 "cluster_id": cluster['_id'],
                 "total_fontes": cluster['total_links'],
-                "media_vies_num": cluster['media_vies'],
-                "viés_descritivo": mapear_viés(cluster['media_vies']), 
-                "gradiente_posicao": calcular_posicao_gradiente(cluster['media_vies']), 
+                "viés_descritivo": mapear_viés(media_vies), 
+                "gradiente_posicao": calcular_posicao_gradiente(media_vies),
                 "lead_titulo": lead_link['titulo'],
                 "lead_fonte": lead_link['fonte'],
-                "lead_vies_num": lead_link['vies'],
                 "links_ordenados": sorted_links 
             }
             final_feed.append(cluster_data)
         
+        # Ordena feed final por número de fontes (relevância)
         final_feed_ordenado = sorted(final_feed, key=itemgetter('total_fontes'), reverse=True)
 
-        feed_json = dumps(final_feed_ordenado)
-        
-        return app.response_class(
-            response=feed_json,
-            status=200,
-            mimetype='application/json'
-        )
+        return app.response_class(response=dumps(final_feed_ordenado), status=200, mimetype='application/json')
 
     except Exception as e:
-        print(f"Erro na rota /api/feed: {e}")
-        # Retorna erro 500 se algo interno falhar
-        return jsonify({"error": "Erro interno ao buscar dados agrupados."}), 500
+        print(f"Erro: {e}")
+        return jsonify({"error": str(e)}), 500
 
-
-# --- 3. INICIALIZAÇÃO ---
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
