@@ -1,20 +1,28 @@
-from playwright.sync_api import sync_playwright
-from bs4 import BeautifulSoup
 from datetime import datetime
 import time 
-# Importa a função que lê o conteúdo real da página
 from scraper.content_extractor import extrair_primeiro_paragrafo
 
+# --- BLINDAGEM CONTRA FALTA DE PLAYWRIGHT ---
+try:
+    from playwright.sync_api import sync_playwright
+    from bs4 import BeautifulSoup
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+
 def coletar_cnn_brasil():
+    # Se o Playwright não estiver instalado (caso do PythonAnywhere), pula esta fonte.
+    if not PLAYWRIGHT_AVAILABLE:
+        print("⚠️ [CNN] Playwright não detectado. Pulando fonte para economizar memória.")
+        return []
+
     BASE_URL = "https://www.cnnbrasil.com.br/politica/"
     noticias_coletadas = []
 
-    # 1. INICIALIZAR O PLAYWRIGHT (Só para pegar a lista dinâmica)
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
-            
             print(f"Playwright: Navegando em {BASE_URL}...")
             page.goto(BASE_URL)
             time.sleep(5) 
@@ -23,13 +31,10 @@ def coletar_cnn_brasil():
             soup = BeautifulSoup(content, 'html.parser')
             browser.close()
             
-            # 4. APLICAÇÃO DO SELETOR H3
             todos_h3 = soup.find_all('h3') 
-            
             count = 0
             for titulo_tag in todos_h3:
                 if count >= 8: break
-
                 link_tag = titulo_tag.find_parent('a')
                 figcaption_tag = titulo_tag.find_parent('figcaption')
 
@@ -40,14 +45,9 @@ def coletar_cnn_brasil():
                     categoria_tag = figcaption_tag.find('span', class_='text-base font-medium text-gray-400')
                     categoria = categoria_tag.text.strip() if categoria_tag else "Sem Categoria"
                     
-                    # --- DEEP SCRAPING ---
                     print(f"   [CNN] Lendo conteúdo: {titulo[:30]}...")
                     conteudo_real = extrair_primeiro_paragrafo(link)
-
-                    if conteudo_real:
-                        texto_analise_ia = f"{titulo}. {conteudo_real}"
-                    else:
-                        texto_analise_ia = titulo
+                    texto_analise_ia = f"{titulo}. {conteudo_real}" if conteudo_real else titulo
 
                     noticias_coletadas.append({
                         "nome_fonte": "CNN Brasil",
@@ -61,9 +61,8 @@ def coletar_cnn_brasil():
                     })
                     count += 1
             
-            print(f"CNN Brasil (Playwright): {len(noticias_coletadas)} notícias coletadas com conteúdo profundo.")
+            print(f"CNN Brasil: {len(noticias_coletadas)} notícias coletadas.")
             return noticias_coletadas
-
     except Exception as e:
         print(f"Erro Playwright CNN: {e}")
         return []

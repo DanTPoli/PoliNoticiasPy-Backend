@@ -1,12 +1,7 @@
-# Versão simplificada das dependências para o ambiente do PythonAnywhere
 Flask
 gunicorn
 pymongo
 python-dotenv
 beautifulsoup4
 requests
-playwright
-numpy
-scikit-learn
-torch
-transformers
+certifi

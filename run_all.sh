@@ -1,13 +1,13 @@
 #!/bin/bash
-# Script de execução da cadeia de processamento do PoliNotícias
 
-# 1. Coletor (Scraper)
+# Script OTIMIZADO para PythonAnywhere (Cota de Disco)
+# Executa apenas a coleta de dados leve.
+# A IA (Clusterização e Viés) deve ser executada localmente no seu PC.
+
+echo "Iniciando Coleta (Modo Leve)..."
+
+# Executa o coletor. 
+# As fontes que exigem Playwright serão puladas automaticamente.
 python3 scraper/collector.py
 
-# 2. Agrupamento (Clusterização)
-python3 analysis/cluster_manager.py
-
-# 3. Classificação de Viés (IA)
-python3 analysis/bias_classifier_bert.py
-
-echo "Processamento de PoliNotícias concluído."
+echo "Coleta finalizada. Dados salvos no MongoDB."
