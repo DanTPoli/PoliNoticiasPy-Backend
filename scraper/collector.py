@@ -24,6 +24,15 @@ from scraper.recipes.correio_braziliense import coletar_correio_braziliense
 from scraper.recipes.piaui import coletar_piaui
 from scraper.recipes.carta_capital import coletar_carta_capital
 from scraper.recipes.veja import coletar_veja
+from scraper.recipes.infomoney import coletar_infomoney
+from scraper.recipes.uol import coletar_uol
+from scraper.recipes.revista_oeste import coletar_revista_oeste
+from scraper.recipes.forbes_brasil import coletar_forbes_brasil
+from scraper.recipes.brasil_paralelo import coletar_brasil_paralelo
+from scraper.recipes.jovem_pan import coletar_jovem_pan
+from scraper.recipes.agencia_brasil import coletar_agencia_brasil
+from scraper.recipes.jornal_de_brasilia import coletar_jornal_de_brasilia
+from scraper.recipes.the_intercept_brasil import coletar_the_intercept_brasil
 
 load_dotenv() 
 MONGO_URI = os.getenv("MONGO_URI")
@@ -55,7 +64,16 @@ def rodar_coleta_completa():
         coletar_correio_braziliense,
         coletar_piaui,
         coletar_carta_capital,
-        coletar_veja
+        coletar_veja,
+        coletar_infomoney,
+        coletar_uol,
+        coletar_revista_oeste,
+        coletar_forbes_brasil,
+        coletar_brasil_paralelo,
+        coletar_jovem_pan,
+        coletar_agencia_brasil,
+        coletar_jornal_de_brasilia,
+        coletar_the_intercept_brasil
     ]
 
     todas_as_noticias = []
