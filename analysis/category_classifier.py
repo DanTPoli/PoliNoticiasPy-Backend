@@ -40,6 +40,10 @@ KEYWORDS = {
         "câmara", "senado", "congresso", "deputado", "senador", "arthur lira", "pacheco",
         "pt", "pl", "psol", "união brasil", "centrão", "oposição", "situação", "leis",
         "decreto", "medida provisória", "votação", "pec", "comissão", "cpi", "cpmi", "eleições"
+    ],
+    "Brasil": [
+        "brasil", "lula", "bolsonaro","arthur lira", "pacheco", "pt", "pl", "psol", "união brasil",
+        "stf", "pgr", "moraes", "zanin", "barroso", "gilmar", "fux", "tse", "lava jato", "oab"
     ]
 }
 

@@ -4,6 +4,8 @@ from datetime import datetime
 # Importa a função que lê o conteúdo real da página
 from scraper.content_extractor import extrair_primeiro_paragrafo
 
+BASE_URL_LINK = "https://www.brasilparalelo.com.br"
+
 def coletar_brasil_paralelo():
     """
     Coleta notícias da Brasil Paralelo (Seção Notícias) com Deep Scraping.
@@ -34,7 +36,10 @@ def coletar_brasil_paralelo():
             link_tag = bloco.find('a', class_='_00-hobbit', href=True)
             
             if link_tag:
-                link = link_tag.get('href')
+                link = link_tag.get('href').strip()
+                # Adiciona a base se o link for relativo (começa com /)
+                if link.startswith('/'):
+                    link = BASE_URL_LINK + link
                 
                 # O título está numa tag h3 com a classe '_00-hobbit-title'
                 titulo_tag = link_tag.find('h3', class_='_00-hobbit-title')

@@ -23,9 +23,8 @@ COLLECTION_RAW = "noticias_raw"
 MODEL_NAME = 'neuralmind/bert-base-portuguese-cased' 
 
 # --- AJUSTE DE SENSIBILIDADE (CORREÇÃO) ---
-# Aumentado de 0.80 para 0.85. 
 # Isso torna o algoritmo mais exigente. Notícias precisam ser muito parecidas para agrupar.
-SIMILARITY_THRESHOLD = 0.90
+SIMILARITY_THRESHOLD = 0.93
 
 # Inicializa o modelo
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)

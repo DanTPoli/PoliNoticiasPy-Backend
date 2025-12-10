@@ -26,18 +26,32 @@ model = AutoModel.from_pretrained(MODEL_NAME)
 
 # --- 1. VIÉS DE REPUTAÇÃO (Ponto de Partida) ---
 SOURCE_BIAS_MAP = {
+    # ESQUERDA
     "Carta Capital": -2.5,
+    "The Intercept Brasil": -2.0,
     "Revista Piauí": -1.5,
     "Folha de S.Paulo": -0.8,
+    "UOL": -0.5,
+    "Agência Brasil": -0.5,
+
+    # CENTRO / NEUTRO
     "BBC Brasil": -0.2, 
     "Metrópoles": 0.0,
     "Correio Braziliense": 0.0,
     "Reuters": 0.0,
-    "O Globo": 0.3,
+    
+    # DIREITA
+    "Jornal de Brasília": 0.5,
+    "O Globo": 0.3, # Mantive o 0.3 original
     "CNN Brasil": 0.5,
+    "Forbes Brasil": 0.7,
+    "InfoMoney": 0.8,
     "Estadão": 1.0, 
     "Veja": 1.0,
-    "Gazeta do Povo": 2.5
+    "Jovem Pan": 1.8,
+    "Revista Oeste": 2.0,
+    "Gazeta do Povo": 2.5,
+    "Brasil Paralelo": 2.5
 }
 
 # --- 2. ÂNCORAS SEMÂNTICAS (Conceitos) ---
