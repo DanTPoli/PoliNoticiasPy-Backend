@@ -24,7 +24,7 @@ MODEL_NAME = 'neuralmind/bert-base-portuguese-cased'
 
 # --- AJUSTE DE SENSIBILIDADE (CORREÇÃO) ---
 # Isso torna o algoritmo mais exigente. Notícias precisam ser muito parecidas para agrupar.
-SIMILARITY_THRESHOLD = 0.94
+SIMILARITY_THRESHOLD = 0.93
 
 # Inicializa o modelo
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
