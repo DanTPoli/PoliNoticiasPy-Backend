@@ -25,12 +25,12 @@ model = SentenceTransformer(MODEL_NAME)
 
 # --- 1. VIÉS DE REPUTAÇÃO (Mantido igual) ---
 SOURCE_BIAS_MAP = {
-    "Carta Capital": -2.5, "The Intercept Brasil": -2.0, "Revista Piauí": -1.5,
-    "Folha de S.Paulo": -0.8, "UOL": -0.5, "Agência Brasil": -0.5,
-    "BBC Brasil": -0.2, "Metrópoles": 0.0, "Correio Braziliense": 0.0, "Reuters": 0.0,
-    "Jornal de Brasília": 0.5, "O Globo": 0.3, "CNN Brasil": 0.5, "Forbes Brasil": 0.7,
-    "InfoMoney": 0.8, "Estadão": 1.0, "Veja": 1.0, "Jovem Pan": 1.8,
-    "Revista Oeste": 2.0, "Gazeta do Povo": 2.5, "Brasil Paralelo": 2.5
+    "Carta Capital": -1.5, "The Intercept Brasil": -1.5, "Revista Piauí": -1.2,
+    "Folha de S.Paulo": -0.4, "UOL": -0.5, "Agência Brasil": -0.7,
+    "BBC Brasil": -0.1, "Metrópoles": 0.0, "Correio Braziliense": 0.2, "Reuters": 0.0,
+    "Jornal de Brasília": 0.5, "O Globo": 0.3, "CNN Brasil": 0.4, "Forbes Brasil": 1.0,
+    "InfoMoney": 0.8, "Estadão": 1.0, "Veja": 0.8, "Jovem Pan": 1.5,
+    "Revista Oeste": 1.7, "Gazeta do Povo": 1.8, "Brasil Paralelo": 1.9
 }
 
 # --- 2. ÂNCORAS SEMÂNTICAS ---
