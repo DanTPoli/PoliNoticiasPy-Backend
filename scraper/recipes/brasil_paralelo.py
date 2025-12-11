@@ -1,82 +1,101 @@
-import requests
-from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 from datetime import datetime
-# Importa a função que lê o conteúdo real da página
-from scraper.content_extractor import extrair_primeiro_paragrafo
-
-BASE_URL_LINK = "https://www.brasilparalelo.com.br"
+import time
 
 def coletar_brasil_paralelo():
     """
-    Coleta notícias da Brasil Paralelo (Seção Notícias) com Deep Scraping.
-    Baseado na estrutura <div class="_00-news-latest-item">.
+    Coleta notícias do Brasil Paralelo usando Playwright.
+    Resolve o problema de 'Lorem Ipsum' esperando o conteúdo carregar dinamicamente.
     """
-    BASE_URL = "https://www.brasilparalelo.com.br/noticias" 
-    HEADERS = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
+    BASE_URL = "https://www.brasilparalelo.com.br/noticias"
+    BASE_DOMAIN = "https://www.brasilparalelo.com.br"
     noticias_coletadas = []
-    
+
     try:
-        response = requests.get(BASE_URL, headers=HEADERS, timeout=15)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
-
-        # 1. IDENTIFICANDO OS BLOCOS CHAVE
-        # Baseado na classe do container fornecido
-        blocos_noticia = soup.find_all('div', class_='_00-news-latest-item')
-
-        count = 0
-
-        for bloco in blocos_noticia:
-            if count >= 8: break
-
-            # 2. EXTRAINDO LINK E TÍTULO
-            # O link tem a classe '_00-hobbit'
-            link_tag = bloco.find('a', class_='_00-hobbit', href=True)
+        with sync_playwright() as p:
+            # Lança o navegador
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            )
+            page = context.new_page()
             
-            if link_tag:
-                link = link_tag.get('href').strip()
-                # Adiciona a base se o link for relativo (começa com /)
-                if link.startswith('/'):
-                    link = BASE_URL_LINK + link
+            print(f"   [Brasil Paralelo] Acessando Home via Playwright...")
+            page.goto(BASE_URL, timeout=60000)
+            
+            links_para_visitar = []
+            
+            try:
+                # Espera os cards carregarem
+                page.wait_for_selector('div._00-news-latest-item', timeout=15000)
                 
-                # O título está numa tag h3 com a classe '_00-hobbit-title'
-                titulo_tag = link_tag.find('h3', class_='_00-hobbit-title')
-                titulo = titulo_tag.text.strip() if titulo_tag else ""
+                # Coleta os links da listagem
+                blocos = page.query_selector_all('div._00-news-latest-item')
                 
-                # Validações
-                if not link or len(titulo) < 5:
-                    continue
+                for bloco in blocos[:8]: # Limite de 8 notícias
+                    link_el = bloco.query_selector('a._00-hobbit')
+                    
+                    if link_el:
+                        url = link_el.get_attribute('href')
+                        if url and url.startswith('/'):
+                            url = BASE_DOMAIN + url
+                            
+                        # Título
+                        h3_el = link_el.query_selector('h3')
+                        titulo = h3_el.inner_text().strip() if h3_el else ""
+                        
+                        if url and len(titulo) > 5:
+                            links_para_visitar.append({'url': url, 'titulo': titulo})
+                            
+            except Exception as e:
+                print(f"   [Brasil Paralelo] Erro ao listar: {e}")
 
-                # --- DEEP SCRAPING ---
-                # O card não tem resumo, então a leitura é obrigatória para contexto
-                print(f"   [Brasil Paralelo] Lendo conteúdo: {titulo[:30]}...")
-                conteudo_real = extrair_primeiro_paragrafo(link)
+            # Visita cada notícia individualmente
+            for item in links_para_visitar:
+                print(f"   [Brasil Paralelo] Navegando: {item['titulo'][:30]}...")
+                try:
+                    page.goto(item['url'], timeout=30000)
+                    
+                    # Espera o texto principal carregar. 
+                    # No Brasil Paralelo, o texto geralmente está em classes 'rich-text' ou 'w-richtext'
+                    try:
+                        page.wait_for_selector('div.w-richtext p', timeout=10000)
+                        paragrafos = page.query_selector_all('div.w-richtext p')
+                    except:
+                        # Fallback se não achar a classe específica
+                        paragrafos = page.query_selector_all('article p')
 
-                if conteudo_real:
-                    texto_analise_ia = f"{titulo}. {conteudo_real}"
-                else:
-                    # Fallback: Apenas o título (card não tem lead/resumo)
-                    texto_analise_ia = titulo
-                
-                noticias_coletadas.append({
-                    "nome_fonte": "Brasil Paralelo",
-                    "titulo": titulo,
-                    "url": link,
-                    "texto_analise_ia": texto_analise_ia,
-                    "viés_classificado": None,
-                    "id_cluster": None,
-                    "data_coleta": datetime.now().isoformat()
-                })
-                count += 1
-        
+                    conteudo = ""
+                    # Pega o primeiro parágrafo que tenha um tamanho decente (evita legendas curtas)
+                    for p in paragrafos:
+                        texto_p = p.inner_text().strip()
+                        if len(texto_p) > 50 and "lorem ipsum" not in texto_p.lower():
+                            conteudo = texto_p
+                            break
+                    
+                    # Se falhar totalmente, usa o título como fallback para não salvar "lorem ipsum"
+                    texto_ia = f"{item['titulo']}. {conteudo}" if conteudo else item['titulo']
+                    
+                    noticias_coletadas.append({
+                        "nome_fonte": "Brasil Paralelo",
+                        "titulo": item['titulo'],
+                        "url": item['url'],
+                        "texto_analise_ia": texto_ia,
+                        "viés_classificado": None,
+                        "id_cluster": None,
+                        "data_coleta": datetime.now().isoformat()
+                    })
+                    
+                    time.sleep(1) # Respeita o servidor
+                    
+                except Exception as e:
+                    print(f"   ⚠️ Falha ao ler artigo BP: {e}")
+
+            browser.close()
+            
         print(f"Brasil Paralelo: {len(noticias_coletadas)} notícias coletadas.")
         return noticias_coletadas
 
-    except requests.RequestException as e:
-        print(f"Erro ao coletar Brasil Paralelo: {e}")
-        return []
     except Exception as e:
-        print(f"Erro inesperado no scraping do Brasil Paralelo: {e}")
+        print(f"Erro Crítico no Playwright do Brasil Paralelo: {e}")
         return []
