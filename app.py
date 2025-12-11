@@ -89,6 +89,11 @@ def get_feed_agrupado():
         for cluster in feed_agregado:
             # Ordena links internos pelo viés (-3 a +3)
             sorted_links = sorted(cluster['links'], key=lambda x: x['vies'] if x['vies'] is not None else 0) 
+
+            # --- Adiciona o texto descritivo em cada link ---
+            for link in sorted_links:
+                # Cria o campo 'vies_texto' baseado no número 'vies'
+                link['vies_texto'] = mapear_viés(link.get('vies'))
             
             # Lead neutro (protegido contra None)
             lead_link = min(cluster['links'], key=lambda x: abs(x['vies'] if x['vies'] is not None else 0))

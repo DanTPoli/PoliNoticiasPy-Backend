@@ -22,7 +22,7 @@ MODEL_NAME = 'intfloat/multilingual-e5-large'
 PREFIXO_MODELO = "passage: "
 
 # Com o E5, a precisão é maior, então 0.85 é um corte muito seguro (equivalente a 0.95 do BERT)
-SIMILARITY_THRESHOLD = 0.94
+SIMILARITY_THRESHOLD = 0.945
 
 print(f"Carregando modelo de clusterização: {MODEL_NAME}...")
 # A biblioteca gerencia o download e cache automaticamente
