@@ -2,16 +2,13 @@ import sys
 import os
 
 # --- CORREÇÃO DE CAMINHO (PATH HACK) ---
-# Adiciona o diretório pai (PoliNoticiasPy) ao sistema de busca do Python.
-# Isso permite que o script encontre o módulo 'scraper' e 'recipes' sem erros.
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import os
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
-# Importe TODAS as suas receitas aqui usando o caminho absoluto (scraper.recipes...)
-# Isso evita confusão de pastas.
+# Importe TODAS as suas receitas aqui...
 from scraper.recipes.cnn_brasil import coletar_cnn_brasil
 from scraper.recipes.folha_sp import coletar_folha_sp
 from scraper.recipes.estadao import coletar_estadao
@@ -37,12 +34,16 @@ from scraper.recipes.the_intercept_brasil import coletar_the_intercept_brasil
 load_dotenv() 
 MONGO_URI = os.getenv("MONGO_URI")
 
+# --- MUDANÇA 1: Definição da Coleção Temporária ---
+COLLECTION_TEMP = "noticias_temp"
+
 def get_db_collection():
     if not MONGO_URI: return None
     try:
         client = MongoClient(MONGO_URI)
         db = client.polinoticias_db 
-        return db.noticias_raw
+        # --- MUDANÇA 2: Aponta para a Temp ---
+        return db[COLLECTION_TEMP]
     except Exception as e:
         print(f"Erro DB: {e}")
         return None
@@ -50,6 +51,11 @@ def get_db_collection():
 def rodar_coleta_completa():
     collection = get_db_collection()
     if collection is None: return
+
+    # --- MUDANÇA 3: Limpeza da Área de Rascunho ---
+    # Antes de coletar, garantimos que a tabela temporária esteja vazia
+    print(f"🧹 Limpando coleção temporária ({COLLECTION_TEMP})...")
+    collection.drop()
 
     # Lista completa de funções
     funcoes_coleta = [
@@ -88,8 +94,9 @@ def rodar_coleta_completa():
 
     if todas_as_noticias:
         try:
+            # Salva na coleção temporária
             collection.insert_many(todas_as_noticias)
-            print(f"\nSUCESSO: {len(todas_as_noticias)} documentos inseridos.")
+            print(f"\nSUCESSO: {len(todas_as_noticias)} documentos inseridos em '{COLLECTION_TEMP}'.")
         except Exception as e:
             print(f"❌ Erro ao salvar no MongoDB: {e}")
     else:

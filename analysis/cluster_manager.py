@@ -14,28 +14,41 @@ from dotenv import load_dotenv
 load_dotenv() 
 MONGO_URI = os.getenv("MONGO_URI") 
 DB_NAME = "polinoticias_db"
-COLLECTION_RAW = "noticias_raw"
+
+# --- MUDANÇA PARA ATOMIC SWAP ---
+# Lê a coleção alvo definida pelo orquestrador. Padrão: "noticias_raw"
+COLLECTION_TARGET = "noticias_temp"
 
 # --- CONFIGURAÇÃO E5 (Alta Precisão) ---
 MODEL_NAME = 'intfloat/multilingual-e5-large'
-# O E5 exige que digamos o que é o texto. "passage: " é para documentos.
 PREFIXO_MODELO = "passage: "
 
-# Com o E5, a precisão é maior, então 0.85 é um corte muito seguro (equivalente a 0.95 do BERT)
-SIMILARITY_THRESHOLD = 0.945
+# Threshold calibrado (0.945 é bem rigoroso, ideal para linkage='complete')
+SIMILARITY_THRESHOLD = 0.90
 
 print(f"Carregando modelo de clusterização: {MODEL_NAME}...")
-# A biblioteca gerencia o download e cache automaticamente
 model = SentenceTransformer(MODEL_NAME)
 
 def get_clean_text_for_embedding(doc):
     """
     Prepara o texto para o modelo E5.
-    O E5 funciona melhor com Título + Lead curto, sem sujeira.
+    Estratégia: Título + Lead (Início do texto).
+    Isso ajuda a conectar notícias com títulos diferentes, mas corta o ruído do texto longo.
     """
     titulo = doc.get('titulo', '').strip()
-    # Adicionamos o prefixo obrigatório
-    return f"{PREFIXO_MODELO}{titulo}"
+    
+    # Pega o texto extraído pela IA
+    corpo = doc.get('texto_analise_ia', '').strip()
+    
+    # Remove o título do corpo se ele já estiver repetido lá
+    if corpo.startswith(titulo):
+        corpo = corpo[len(titulo):].strip()
+        
+    # TRUQUE DO LEAD: Pegamos apenas os primeiros 300 caracteres.
+    lead = corpo[:300]
+    
+    # O E5 exige o prefixo
+    return f"{PREFIXO_MODELO}{titulo}. {lead}"
 
 def rodar_agrupamento():
     if not MONGO_URI:
@@ -45,33 +58,34 @@ def rodar_agrupamento():
     try:
         client = MongoClient(MONGO_URI)
         db = client[DB_NAME]
-        raw_collection = db[COLLECTION_RAW]
         
-        # Filtro opcional: em produção, filtrar por data (ex: últimas 48h) economiza RAM
+        # --- USA A COLEÇÃO DINÂMICA ---
+        raw_collection = db[COLLECTION_TARGET]
+        
+        # Busca notícias
         noticias = list(raw_collection.find({}))
         
         if not noticias:
-            print("Nenhuma notícia encontrada.")
+            print(f"Nenhuma notícia encontrada em '{COLLECTION_TARGET}'.")
             return
 
-        print(f"Processando {len(noticias)} notícias com E5-Large...")
+        print(f"Processando {len(noticias)} notícias em '{COLLECTION_TARGET}' com E5-Large...")
         
         # Prepara lista de textos e IDs
         textos = [get_clean_text_for_embedding(n) for n in noticias]
         ids_map = [n['_id'] for n in noticias]
         
-        # 1. Gera embeddings (A mágica acontece aqui, muito mais limpo)
-        # batch_size=16 é um bom equilíbrio para o Pi 5
+        # 1. Gera embeddings 
         print("Gerando vetores semânticos...")
         embeddings = model.encode(
             textos, 
             batch_size=16, 
             show_progress_bar=True, 
-            normalize_embeddings=True # Crucial para distância cosseno
+            normalize_embeddings=True 
         )
 
         # 2. Agrupa (Hierarchical Clustering)
-        # Linkage 'average' funciona melhor com embeddings de alta qualidade como E5
+        # Linkage 'complete' é essencial para evitar o "super-cluster"
         clustering = AgglomerativeClustering(
             n_clusters=None, 
             distance_threshold=1 - SIMILARITY_THRESHOLD, 

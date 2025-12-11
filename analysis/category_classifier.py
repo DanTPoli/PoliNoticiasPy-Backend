@@ -12,10 +12,13 @@ from dotenv import load_dotenv
 load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI") 
 DB_NAME = "polinoticias_db"
-COLLECTION_RAW = "noticias_raw"
+
+# --- MUDANÇA PARA ATOMIC SWAP ---
+# Tenta pegar a variável de ambiente definida pelo orquestrador.
+# Se não existir, usa o padrão "noticias_raw".
+COLLECTION_TARGET = "noticias_temp"
 
 # --- DEFINIÇÃO DE CATEGORIAS E PALAVRAS-CHAVE ---
-# Palavras que definem cada tag
 KEYWORDS = {
     "Economia": [
         "dólar", "euro", "bolsa", "ibovespa", "selic", "inflação", "ipca", "pib", 
@@ -50,27 +53,20 @@ KEYWORDS = {
 def classificar_categoria(texto):
     """
     Analisa o texto e retorna uma LISTA de categorias relevantes.
-    Exemplo de retorno: ["Política", "Justiça"]
     """
-    if not texto: return ["Brasil"] # Categoria padrão
+    if not texto: return ["Brasil"] 
     
     texto_lower = texto.lower()
     scores = {cat: 0 for cat in KEYWORDS}
     
-    # Conta ocorrências das palavras-chave
     for categoria, termos in KEYWORDS.items():
         for termo in termos:
-            # Usa regex para buscar a palavra exata (evita parciais)
             if re.search(rf"\b{termo}\b", texto_lower):
                 scores[categoria] += 1
     
-    # Filtra categorias que tiveram pelo menos 1 match (pontuação > 0)
     categorias_detectadas = [cat for cat, score in scores.items() if score > 0]
-    
-    # Ordena as categorias pela pontuação (as mais relevantes aparecem primeiro na lista)
     categorias_detectadas.sort(key=lambda x: scores[x], reverse=True)
     
-    # Se nenhuma palavra-chave for encontrada, define como 'Brasil'
     if not categorias_detectadas:
         return ["Brasil"]
         
@@ -84,21 +80,20 @@ def rodar_classificacao_categorias():
     try:
         client = MongoClient(MONGO_URI)
         db = client[DB_NAME]
-        raw_collection = db[COLLECTION_RAW]
         
-        # Busca todas as notícias para classificar
+        # --- MUDANÇA: Usa a coleção dinâmica ---
+        raw_collection = db[COLLECTION_TARGET]
+        
         noticias = list(raw_collection.find({}))
         
-        print(f"Classificando categorias (Multi-Tag) de {len(noticias)} notícias...")
+        print(f"Classificando categorias em '{COLLECTION_TARGET}' ({len(noticias)} notícias)...")
         
         updates = 0
         for n in noticias:
-            # Usa o texto rico coletado (Deep Scraping) para maior precisão
             texto_completo = n.get('texto_analise_ia', n.get('titulo', ''))
             
             novas_categorias = classificar_categoria(texto_completo)
             
-            # Atualiza no banco salvando a lista (Array)
             raw_collection.update_one(
                 {"_id": n['_id']},
                 {"$set": {"categoria": novas_categorias}} 

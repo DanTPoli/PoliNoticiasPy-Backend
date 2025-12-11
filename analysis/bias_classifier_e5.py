@@ -12,18 +12,20 @@ from sklearn.metrics.pairwise import cosine_similarity
 load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI") 
 DB_NAME = "polinoticias_db"
-COLLECTION_RAW = "noticias_raw"
+
+# --- MUDANÇA PARA ATOMIC SWAP ---
+# Tenta pegar a variável de ambiente definida pelo orquestrador.
+# Se não existir, usa o padrão "noticias_raw".
+COLLECTION_TARGET = "noticias_temp"
 
 # --- MUDANÇA PARA E5-LARGE ---
 MODEL_NAME = 'intfloat/multilingual-e5-large'
-# Para análise de viés, tratamos tanto as âncoras quanto as notícias como "passage"
-# para comparação simétrica de documentos.
 PREFIXO_MODELO = "passage: "
 
 print(f"Carregando modelo de viés: {MODEL_NAME}...")
 model = SentenceTransformer(MODEL_NAME)
 
-# --- 1. VIÉS DE REPUTAÇÃO (Mantido igual) ---
+# --- 1. VIÉS DE REPUTAÇÃO ---
 SOURCE_BIAS_MAP = {
     "Carta Capital": -1.5, "The Intercept Brasil": -1.5, "Revista Piauí": -1.2,
     "Folha de S.Paulo": -0.4, "UOL": -0.5, "Agência Brasil": -0.7,
@@ -34,7 +36,6 @@ SOURCE_BIAS_MAP = {
 }
 
 # --- 2. ÂNCORAS SEMÂNTICAS ---
-# Adicionamos o prefixo em cada frase para o E5
 POLARITY_PHRASES = {
     "direita": [
         f"{PREFIXO_MODELO}defesa do livre mercado estado mínimo e privatizações",
@@ -60,37 +61,28 @@ POLARITY_PHRASES = {
 
 # Pré-cálculo dos arquétipos
 print("Gerando vetores de referência ideológica...")
-# O encode já retorna numpy arrays normalizados
 emb_direita = model.encode(POLARITY_PHRASES["direita"], normalize_embeddings=True)
 emb_esquerda = model.encode(POLARITY_PHRASES["esquerda"], normalize_embeddings=True)
 
-# Vetor médio (Centróide)
 CENTROIDE_DIREITA = np.mean(emb_direita, axis=0).reshape(1, -1)
 CENTROIDE_ESQUERDA = np.mean(emb_esquerda, axis=0).reshape(1, -1)
 
 def classificar_vies_e5(text, nome_fonte):
     if not text: return 0.0
     
-    # Prepara o texto com o prefixo
     input_text = f"{PREFIXO_MODELO}{text}"
-    
-    # Gera embedding
     text_embedding = model.encode(input_text, normalize_embeddings=True).reshape(1, -1)
     
-    # Calcula similaridade
     sim_dir = cosine_similarity(text_embedding, CENTROIDE_DIREITA)[0][0]
     sim_esq = cosine_similarity(text_embedding, CENTROIDE_ESQUERDA)[0][0]
     
     raw_diff = sim_dir - sim_esq
     
-    # Fator de amplificação (E5 tem vetores mais distintos, talvez precise ajustar esse 20 futuramente)
     ai_score = raw_diff * 20 
     ai_score = max(-3.0, min(3.0, ai_score))
 
-    # Viés da Fonte
     source_score = SOURCE_BIAS_MAP.get(nome_fonte, 0.0)
     
-    # Média Ponderada (60% IA, 40% Fonte)
     final_score = (ai_score * 0.6) + (source_score * 0.4)
     
     return float(round(final_score, 2))
@@ -101,12 +93,15 @@ def rodar_classificacao():
     try:
         client = MongoClient(MONGO_URI)
         db = client[DB_NAME]
-        raw_collection = db[COLLECTION_RAW]
         
+        # --- USA A COLEÇÃO DINÂMICA ---
+        raw_collection = db[COLLECTION_TARGET]
+        
+        # Busca apenas na coleção alvo
         noticias = list(raw_collection.find({}))
         if not noticias: return
 
-        print(f"Recalculando viés de {len(noticias)} notícias (E5-Large)...")
+        print(f"Recalculando viés de {len(noticias)} notícias em '{COLLECTION_TARGET}' (E5-Large)...")
         
         updates = 0
         for n in noticias:

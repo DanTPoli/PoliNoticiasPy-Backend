@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI") 
 DB_NAME = "polinoticias_db"
-COLLECTIONS_TO_RESET = ["noticias_raw"] # Lista de coleções a serem limpas
+COLLECTIONS_TO_RESET = ["noticias_temp"] # Lista de coleções a serem limpas
 
 def reset_collections():
     """Conecta ao MongoDB Atlas e apaga todos os documentos das coleções listadas."""
