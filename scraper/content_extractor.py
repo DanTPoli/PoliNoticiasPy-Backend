@@ -1,47 +1,51 @@
 import requests
 from bs4 import BeautifulSoup
 
-# Headers padrão para evitar bloqueios simples
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }
 
 def extrair_primeiro_paragrafo(url):
-    """
-    Visita a URL da notícia e tenta extrair o primeiro parágrafo significativo.
-    Retorna uma string limpa ou None se falhar.
-    """
     try:
-        # Timeout curto para não travar o scraper se o site for lento
-        response = requests.get(url, headers=HEADERS, timeout=5)
+        # Aumentado para 10s para garantir carga em sites mais pesados
+        response = requests.get(url, headers=HEADERS, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
 
-        # Tenta encontrar o corpo do texto. 
-        # A maioria dos sites usa <article>, <main> ou classes específicas.
-        # Esta é uma heurística genérica que funciona em muitos portais.
+        # 1. REFINAMENTO: Busca containers específicos para evitar lixo institucional
+        # Se você notar que outros portais estão vindo com lixo, basta adicionar o elif aqui.
+        target = None
+        if "brasildefato.com.br" in url:
+            target = soup.find('div', class_='elementor-widget-theme-post-content')
         
-        # 1. Procura por tags <p> dentro de um <article> (Padrão moderno HTML5)
-        article = soup.find('article')
-        if article:
-            paragrafos = article.find_all('p')
-            for p in paragrafos:
-                texto = p.text.strip()
-                # Ignora parágrafos muito curtos (legendas, autores, datas)
-                if len(texto) > 50: 
-                    return texto
+        # Se não for um site mapeado ou não achou o container, usa o seu padrão original
+        if not target:
+            target = soup.find('article') or soup.find('main') or soup.find('div', class_='content') or soup.body
 
-        # 2. Fallback: Procura por tags <p> no corpo principal se não achar <article>
-        # Exclui headers e footers da busca
-        main_content = soup.find('main') or soup.find('div', class_='content') or soup.body
-        
-        if main_content:
-            paragrafos = main_content.find_all('p')
+        if target:
+            paragrafos_validos = []
+            paragrafos = target.find_all('p')
+            
             for p in paragrafos:
-                texto = p.text.strip()
+                texto = p.get_text().strip()
+                
+                # FILTRO DE RUÍDO: Ignora parágrafos institucionais conhecidos
+                if "Todos os conteúdos" in texto or "direitos reservados" in texto.lower():
+                    continue
+                
                 if len(texto) > 50:
-                    return texto
-        
+                    paragrafos_validos.append(texto)
+                    
+                    # REFINAMENTO "TEXTO COMPLETO": 
+                    # Acumula até ter pelo menos 180 caracteres para a IA ter contexto real.
+                    texto_acumulado = " ".join(paragrafos_validos)
+                    if len(texto_acumulado) > 180:
+                        return texto_acumulado
+            
+            # Caso tenha encontrado texto mas não atingiu 180 chars, retorna o que tiver
+            if paragrafos_validos:
+                return " ".join(paragrafos_validos)
+
         return None
 
     except Exception as e:
