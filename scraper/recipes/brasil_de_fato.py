@@ -1,80 +1,96 @@
-import requests
-from bs4 import BeautifulSoup
 from datetime import datetime
-from urllib.parse import urljoin
-import re
+import time
 from scraper.content_extractor import extrair_primeiro_paragrafo
 
+# Blindagem para ambientes sem Playwright
+try:
+    from playwright.sync_api import sync_playwright
+    from bs4 import BeautifulSoup
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+
 def coletar_brasil_de_fato():
+    if not PLAYWRIGHT_AVAILABLE:
+        print("⚠️ [BdF] Playwright não instalado. Pulando fonte.")
+        return []
+
     BASE_URL = "https://www.brasildefato.com.br/politica"
-    # User-Agent mais completo para evitar bloqueios de segurança
-    HEADERS = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
-    }
     noticias_coletadas = []
 
     try:
-        response = requests.get(BASE_URL, headers=HEADERS, timeout=20)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
-
-        # ESTRATÉGIA REFINADA: 
-        # Em vez de buscar o div 'e-loop-item', vamos buscar todos os H2 
-        # que contenham a classe 'elementor-heading-title', que vimos no seu HTML.
-        manchetes = soup.find_all('h2', class_=re.compile("elementor-heading-title"))
-
-        if not manchetes:
-            # Fallback: Busca qualquer link que tenha o padrão de data do BdF (/2026/01/...)
-            manchetes = [a.parent for a in soup.find_all('a', href=re.compile(r'/\d{4}/\d{2}/\d{2}/'))]
-
-        urls_vistas = set()
-        count = 0
-        
-        for tag in manchetes:
-            if count >= 10: break
-
-            # Busca o <a> dentro ou próximo à tag encontrada
-            link_tag = tag.find('a') if tag.name != 'a' else tag
+        with sync_playwright() as p:
+            # Lançando o browser
+            browser = p.chromium.launch(headless=True)
+            # Definindo um User-Agent de navegador real para evitar bloqueios
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+            )
+            page = context.new_page()
             
-            if link_tag and link_tag.get('href'):
-                href = link_tag.get('href')
-                link_completo = urljoin(BASE_URL, href)
-                
-                # Limpeza: evita links repetidos, de categorias ou institucionais
-                if link_completo in urls_vistas or "/editoria/" in link_completo or "doar" in link_completo:
+            print(f"🚀 [BdF] Navegando para {BASE_URL}...")
+            
+            # Navegação com espera inteligente
+            page.goto(BASE_URL, wait_until="networkidle", timeout=60000)
+            
+            # Espera específica pelo seletor do Elementor que você enviou
+            page.wait_for_selector(".e-loop-item", timeout=15000)
+            
+            # Pequeno scroll para garantir que o lazy load (se houver) dispare
+            page.mouse.wheel(0, 500)
+            time.sleep(2)
+
+            content = page.content()
+            soup = BeautifulSoup(content, 'html.parser')
+            browser.close()
+
+            # Localizando os itens de loop baseados no seu HTML
+            itens = soup.find_all('div', class_='e-loop-item')
+            
+            count = 0
+            for item in itens:
+                if count >= 10: break
+
+                try:
+                    # O título está dentro de um h2 com a classe elementor-heading-title
+                    h2_tag = item.find('h2', class_='elementor-heading-title')
+                    if not h2_tag: continue
+                    
+                    link_tag = h2_tag.find('a')
+                    if not link_tag: continue
+
+                    titulo = link_tag.get_text().strip()
+                    link = link_tag.get('href')
+
+                    # Filtragem de links institucionais ou repetidos
+                    if not titulo or "brasildefato.com.br" not in link: continue
+
+                    print(f"   [BdF] Lendo conteúdo: {titulo[:40]}...")
+                    
+                    # Chamada para sua função de Deep Scraping (o primeiro parágrafo do link)
+                    conteudo_real = extrair_primeiro_paragrafo(link)
+                    
+                    # Refinamento do Texto para IA (Título + Lead)
+                    texto_analise_ia = f"{titulo}. {conteudo_real}" if conteudo_real else titulo
+
+                    noticias_coletadas.append({
+                        "nome_fonte": "Brasil de Fato",
+                        "titulo": titulo,
+                        "url": link,
+                        "texto_analise_ia": texto_analise_ia,
+                        "viés_classificado": None,
+                        "id_cluster": None,
+                        "data_coleta": datetime.now().isoformat()
+                    })
+                    count += 1
+
+                except Exception as e_item:
+                    print(f"⚠️ Erro no item individual BdF: {e_item}")
                     continue
-                
-                titulo = link_tag.get_text().strip()
-                if len(titulo) < 10: continue # Pula títulos muito curtos/ruídos
 
-                print(f"   [BdF] Processando: {titulo[:50]}...")
-                
-                # DEEP SCRAPING
-                conteudo_lead = extrair_primeiro_paragrafo(link_completo)
-                
-                if conteudo_lead:
-                    texto_analise_ia = f"{titulo}. {conteudo_lead}"
-                else:
-                    # Se não conseguir ler o conteúdo, tenta pegar o texto ao redor do link na home
-                    texto_analise_ia = titulo
-
-                noticias_coletadas.append({
-                    "nome_fonte": "Brasil de Fato",
-                    "titulo": titulo,
-                    "url": link_completo,
-                    "texto_analise_ia": texto_analise_ia,
-                    "viés_classificado": None,
-                    "id_cluster": None,
-                    "data_coleta": datetime.now().isoformat()
-                })
-                
-                urls_vistas.add(link_completo)
-                count += 1
-
-        print(f"✅ Brasil de Fato: {len(noticias_coletadas)} notícias coletadas.")
-        return noticias_coletadas
+            print(f"✅ Brasil de Fato: {len(noticias_coletadas)} notícias coletadas com Playwright.")
+            return noticias_coletadas
 
     except Exception as e:
-        print(f"❌ Erro fatal no Brasil de Fato: {e}")
+        print(f"❌ Erro fatal Playwright BdF: {e}")
         return []
