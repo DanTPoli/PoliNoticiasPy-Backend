@@ -30,7 +30,7 @@ from scraper.recipes.jovem_pan import coletar_jovem_pan
 from scraper.recipes.agencia_brasil import coletar_agencia_brasil
 from scraper.recipes.jornal_de_brasilia import coletar_jornal_de_brasilia
 from scraper.recipes.the_intercept_brasil import coletar_the_intercept_brasil
-
+from scraper.recipes.brasil_de_fato import coletar_brasil_de_fato
 load_dotenv() 
 MONGO_URI = os.getenv("MONGO_URI")
 
@@ -79,7 +79,8 @@ def rodar_coleta_completa():
         coletar_jovem_pan,
         coletar_agencia_brasil,
         coletar_jornal_de_brasilia,
-        coletar_the_intercept_brasil
+        coletar_the_intercept_brasil,
+        coletar_brasil_de_fato
     ]
 
     todas_as_noticias = []
