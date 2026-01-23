@@ -1,8 +1,8 @@
 from datetime import datetime
 import time
+from urllib.parse import urljoin
 from scraper.content_extractor import extrair_primeiro_paragrafo
 
-# Blindagem para ambientes sem Playwright
 try:
     from playwright.sync_api import sync_playwright
     from bs4 import BeautifulSoup
@@ -10,68 +10,72 @@ try:
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
 
-def coletar_brasil_de_fato():
+def coletar_brasil_de_fato_home():
     if not PLAYWRIGHT_AVAILABLE:
-        print("⚠️ [BdF] Playwright não instalado. Pulando fonte.")
+        print("⚠️ [BdF] Playwright não disponível.")
         return []
 
-    BASE_URL = "https://www.brasildefato.com.br/politica"
+    # AGORA NA HOME PRINCIPAL
+    BASE_URL = "https://www.brasildefato.com.br/"
     noticias_coletadas = []
+    urls_vistas = set() # Para evitar duplicados da home
 
     try:
         with sync_playwright() as p:
-            # Lançando o browser
             browser = p.chromium.launch(headless=True)
-            # Definindo um User-Agent de navegador real para evitar bloqueios
             context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
             page = context.new_page()
             
-            print(f"🚀 [BdF] Navegando para {BASE_URL}...")
+            print(f"🚀 [BdF Home] Acessando {BASE_URL}...")
             
-            # Navegação com espera inteligente
-            page.goto(BASE_URL, wait_until="networkidle", timeout=60000)
+            # Espera carregar os elementos do Elementor
+            page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_selector(".e-loop-item", timeout=20000)
             
-            # Espera específica pelo seletor do Elementor que você enviou
-            page.wait_for_selector(".e-loop-item", timeout=15000)
-            
-            # Pequeno scroll para garantir que o lazy load (se houver) dispare
-            page.mouse.wheel(0, 500)
+            # Scroll leve para carregar imagens e conteúdos dinâmicos
+            page.evaluate("window.scrollBy(0, 800)")
             time.sleep(2)
 
             content = page.content()
             soup = BeautifulSoup(content, 'html.parser')
             browser.close()
 
-            # Localizando os itens de loop baseados no seu HTML
+            # O Elementor usa 'e-loop-item' para quase todos os blocos de notícias na home
             itens = soup.find_all('div', class_='e-loop-item')
             
             count = 0
             for item in itens:
-                if count >= 10: break
+                if count >= 12: break # Pegamos um pouco mais na home para garantir variedade
 
                 try:
-                    # O título está dentro de um h2 com a classe elementor-heading-title
-                    h2_tag = item.find('h2', class_='elementor-heading-title')
+                    # Captura o título dentro do padrão que você enviou
+                    h2_tag = item.find(['h2', 'h3'], class_='elementor-heading-title')
                     if not h2_tag: continue
                     
                     link_tag = h2_tag.find('a')
                     if not link_tag: continue
 
                     titulo = link_tag.get_text().strip()
-                    link = link_tag.get('href')
+                    # Resolve URLs relativas para absolutas
+                    link = urljoin(BASE_URL, link_tag.get('href'))
 
-                    # Filtragem de links institucionais ou repetidos
-                    if not titulo or "brasildefato.com.br" not in link: continue
+                    # --- REFINAMENTO DE FILTRAGEM ---
+                    # 1. Evita duplicados (comum na home ter a mesma notícia em dois blocos)
+                    # 2. Garante que o link é uma notícia (geralmente tem data no BDdeF)
+                    if link in urls_vistas or "/202" not in link: 
+                        continue
 
-                    print(f"   [BdF] Lendo conteúdo: {titulo[:40]}...")
+                    print(f"   [BdF Home] Lendo: {titulo[:45]}...")
                     
-                    # Chamada para sua função de Deep Scraping (o primeiro parágrafo do link)
-                    conteudo_real = extrair_primeiro_paragrafo(link)
+                    # Extração do Lead via Deep Scraping
+                    conteudo_lead = extrair_primeiro_paragrafo(link)
                     
-                    # Refinamento do Texto para IA (Título + Lead)
-                    texto_analise_ia = f"{titulo}. {conteudo_real}" if conteudo_real else titulo
+                    if conteudo_lead:
+                        texto_analise_ia = f"{titulo}. {conteudo_lead}"
+                    else:
+                        texto_analise_ia = titulo
 
                     noticias_coletadas.append({
                         "nome_fonte": "Brasil de Fato",
@@ -82,15 +86,16 @@ def coletar_brasil_de_fato():
                         "id_cluster": None,
                         "data_coleta": datetime.now().isoformat()
                     })
+                    
+                    urls_vistas.add(link)
                     count += 1
 
                 except Exception as e_item:
-                    print(f"⚠️ Erro no item individual BdF: {e_item}")
                     continue
 
-            print(f"✅ Brasil de Fato: {len(noticias_coletadas)} notícias coletadas com Playwright.")
+            print(f"✅ BdF Home: {len(noticias_coletadas)} notícias coletadas.")
             return noticias_coletadas
 
     except Exception as e:
-        print(f"❌ Erro fatal Playwright BdF: {e}")
+        print(f"❌ Erro fatal na Home do BdF: {e}")
         return []
