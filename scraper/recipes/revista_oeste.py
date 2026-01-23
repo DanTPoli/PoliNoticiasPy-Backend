@@ -12,22 +12,17 @@ def coletar_revista_oeste():
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-            # Aumentamos um pouco o viewport para parecer mais um navegador real
             context = browser.new_context(
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                viewport={'width': 1280, 'height': 800}
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             )
             page = context.new_page()
             
             print(f"   [Revista Oeste] Acessando Home...")
-            page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
+            page.goto(BASE_URL, timeout=60000)
             
             links_para_visitar = []
             try:
                 page.wait_for_selector('article.card-post', timeout=20000)
-                # Pequeno scroll para garantir que o JS da home carregue os links
-                page.evaluate("window.scrollBy(0, 500)")
-                
                 soup_home = BeautifulSoup(page.content(), 'html.parser')
                 blocos = soup_home.find_all('article', class_='card-post')
                 
@@ -36,43 +31,37 @@ def coletar_revista_oeste():
                     if link_el:
                         url = link_el.get('href')
                         titulo = link_el.get_text().strip()
+                        # Filtro para ignorar charges ou títulos muito curtos
                         if url and len(titulo) > 30:
                             links_para_visitar.append({'url': url, 'titulo': titulo})
             except Exception as e:
                 print(f"   [Revista Oeste] Erro na listagem: {e}")
 
             for item in links_para_visitar:
-                if len(noticias_coletadas) >= 8: break
-                
                 print(f"   [Revista Oeste] Lendo: {item['titulo'][:30]}...")
                 try:
-                    # AJUSTE 1: Espera apenas o carregamento básico do HTML
-                    page.goto(item['url'], wait_until="domcontentloaded", timeout=40000)
+                    # AJUSTE: Navega e espera o tempo do desafio automático do Cloudflare
+                    page.goto(item['url'], timeout=45000)
+                    time.sleep(7) 
                     
-                    # AJUSTE 2: Pausa tática para o Cloudflare processar o desafio automático
-                    time.sleep(4) 
-                    
-                    # AJUSTE 3: Espera o seletor real. Se falhar aqui, o site nos bloqueou.
-                    page.wait_for_selector('.artigo--texto, .entry-content', timeout=20000)
+                    # Espera o seletor de conteúdo aparecer após o desafio
+                    page.wait_for_selector('article', timeout=20000)
                     
                     conteudo = extrair_primeiro_paragrafo(item['url'], html_content=page.content())
                     
-                    if conteudo and "Verifying you are human" not in conteudo:
+                    if conteudo:
                         noticias_coletadas.append({
                             "nome_fonte": "Revista Oeste",
                             "titulo": item['titulo'],
                             "url": item['url'],
                             "texto_analise_ia": f"{item['titulo']}. {conteudo}",
-                            "viés_classificado": None,
-                            "id_cluster": None,
                             "data_coleta": datetime.now().isoformat()
                         })
                     
                     time.sleep(2) 
                     
-                except Exception as e:
-                    # Imprime o erro para diagnóstico (ex: se foi Timeout)
-                    print(f"   ⚠️ Falha em {item['url'][:40]}: {type(e).__name__}")
+                except Exception:
+                    print(f"   ⚠️ Timeout ou bloqueio na matéria: {item['url'][:40]}")
 
             browser.close()
             
