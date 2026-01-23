@@ -27,7 +27,7 @@ model = SentenceTransformer(MODEL_NAME)
 
 # --- 1. VIÉS DE REPUTAÇÃO ---
 SOURCE_BIAS_MAP = {
-    "Carta Capital": -1.5, "The Intercept Brasil": -1.5, "Revista Piauí": -1.2,
+    "Carta Capital": -1.5, "The Intercept Brasil": -1.5, "Revista Piauí": -1.2, "Brasil de Fato": -1.0,
     "Folha de S.Paulo": -0.4, "UOL": -0.5, "Agência Brasil": -0.7,
     "BBC Brasil": -0.1, "Metrópoles": 0.0, "Correio Braziliense": 0.2, "Reuters": 0.0,
     "Jornal de Brasília": 0.5, "O Globo": 0.3, "CNN Brasil": 0.4, "Forbes Brasil": 1.0,
