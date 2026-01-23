@@ -2,6 +2,8 @@ from playwright.sync_api import sync_playwright
 from datetime import datetime
 import time
 
+from scraper.content_extractor import extrair_primeiro_paragrafo
+
 def coletar_revista_oeste():
     """
     Coleta notícias da Revista Oeste usando Playwright TOTAL (Listagem + Conteúdo)
@@ -42,16 +44,13 @@ def coletar_revista_oeste():
 
             # Agora visitamos cada link USANDO O MESMO BROWSER (fura o bloqueio)
             for item in links_para_visitar:
-                print(f"   [Revista Oeste] Navegando: {item['titulo'][:30]}...")
+                print(f"   [Revista Oeste] Processando lead: {item['titulo'][:30]}...")
                 try:
                     page.goto(item['url'], timeout=30000)
                     
-                    # Tenta pegar o primeiro parágrafo
-                    # O seletor comum de conteúdo no WordPress é .entry-content p
-                    conteudo = ""
-                    paragrafo = page.query_selector('.entry-content p')
-                    if paragrafo:
-                        conteudo = paragrafo.inner_text().strip()
+                    # --- MUDANÇA CIRÚRGICA AQUI ---
+                    # Chamamos o extrator central enviando o HTML da página atual
+                    conteudo = extrair_primeiro_paragrafo(item['url'], html_content=page.content())
                     
                     texto_ia = f"{item['titulo']}. {conteudo}" if conteudo else item['titulo']
                     
@@ -65,7 +64,6 @@ def coletar_revista_oeste():
                         "data_coleta": datetime.now().isoformat()
                     })
                     
-                    # Pausa humana para não sobrecarregar
                     time.sleep(1) 
                     
                 except Exception as e:
