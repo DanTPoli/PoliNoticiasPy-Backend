@@ -32,7 +32,7 @@ def coletar_brasil_de_fato():
             )
             page = context.new_page()
             
-            print(f"🚀 [BdF] Acessando Home...")
+            print(f"[BdF] Acessando Home via Playwright...")
             page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
             
             # Espera o Elementor carregar os blocos de notícia
@@ -66,7 +66,7 @@ def coletar_brasil_de_fato():
                 if len(noticias_coletadas) >= 10: 
                     break
 
-                print(f"   [BdF] Lendo lead real: {titulo_candidato[:50]}...")
+                print(f"   [BdF] Lendo conteúdo: {titulo_candidato[:50]}...")
                 
                 # DEEP SCRAPING: Acessa a página da notícia para pegar o lead real
                 conteudo_lead = extrair_primeiro_paragrafo(url_completa)
@@ -93,7 +93,7 @@ def coletar_brasil_de_fato():
                 
                 urls_vistas.add(url_completa)
 
-            print(f"✅ Brasil de Fato: {len(noticias_coletadas)} notícias filtradas com sucesso.")
+            print(f"Brasil de Fato: {len(noticias_coletadas)} notícias filtradas com sucesso.")
             return noticias_coletadas
 
     except Exception as e:
