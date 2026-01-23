@@ -20,7 +20,7 @@ COLLECTION_TARGET = "noticias_temp"
 
 # --- MUDANÇA PARA E5-LARGE ---
 MODEL_NAME = 'intfloat/multilingual-e5-large'
-PREFIXO_MODELO = "passage: "
+PREFIXO_MODELO = "query: "
 
 print(f"Carregando modelo de viés: {MODEL_NAME}...")
 model = SentenceTransformer(MODEL_NAME)
@@ -38,24 +38,24 @@ SOURCE_BIAS_MAP = {
 # --- 2. ÂNCORAS SEMÂNTICAS ---
 POLARITY_PHRASES = {
     "direita": [
-        f"{PREFIXO_MODELO}defesa do livre mercado estado mínimo e privatizações",
-        f"{PREFIXO_MODELO}redução de impostos e desburocratização para empresas",
-        f"{PREFIXO_MODELO}responsabilidade fiscal teto de gastos e meritocracia",
-        f"{PREFIXO_MODELO}crítica ao assistencialismo e defesa do empreendedorismo",
-        f"{PREFIXO_MODELO}defesa da família tradicional e valores cristãos",
-        f"{PREFIXO_MODELO}segurança pública rigorosa armamento e combate ao crime",
-        f"{PREFIXO_MODELO}patriotismo e soberania nacional contra globalismo",
-        f"{PREFIXO_MODELO}liberdade religiosa e oposição ao aborto"
+        f"{PREFIXO_MODELO}artigo que defende o livre mercado, o estado mínimo e as privatizações",
+        f"{PREFIXO_MODELO}texto focado na redução de impostos e na desburocratização para empresas",
+        f"{PREFIXO_MODELO}conteúdo que exalta a responsabilidade fiscal, o teto de gastos e a meritocracia",
+        f"{PREFIXO_MODELO}notícia com críticas ao assistencialismo estatal e defesa do empreendedorismo",
+        f"{PREFIXO_MODELO}texto que valoriza a família tradicional e os valores cristãos",
+        f"{PREFIXO_MODELO}artigo que apoia a segurança pública rigorosa, o armamento e o combate ao crime",
+        f"{PREFIXO_MODELO}conteúdo que exalta o patriotismo e a soberania nacional contra o globalismo",
+        f"{PREFIXO_MODELO}texto em defesa da liberdade religiosa e com posicionamento contrário ao aborto"
     ],
     "esquerda": [
-        f"{PREFIXO_MODELO}fortalecimento do estado e serviços públicos estatais",
-        f"{PREFIXO_MODELO}distribuição de renda e taxação de grandes fortunas",
-        f"{PREFIXO_MODELO}direitos trabalhistas e valorização do salário mínimo",
-        f"{PREFIXO_MODELO}reforma agrária e função social da propriedade",
-        f"{PREFIXO_MODELO}defesa dos direitos humanos e minorias sociais",
-        f"{PREFIXO_MODELO}políticas de inclusão diversidade e cotas raciais",
-        f"{PREFIXO_MODELO}proteção ambiental e demarcação de terras indígenas",
-        f"{PREFIXO_MODELO}descriminalização das drogas e estado laico"
+        f"{PREFIXO_MODELO}artigo que defende o fortalecimento do estado e dos serviços públicos estatais",
+        f"{PREFIXO_MODELO}texto focado na distribuição de renda e na taxação de grandes fortunas",
+        f"{PREFIXO_MODELO}notícia que reivindica direitos trabalhistas e a valorização do salário mínimo",
+        f"{PREFIXO_MODELO}conteúdo que apoia a reforma agrária e a função social da propriedade",
+        f"{PREFIXO_MODELO}texto em defesa dos direitos humanos, das minorias e dos movimentos sociais",
+        f"{PREFIXO_MODELO}artigo que promove políticas de inclusão, diversidade e cotas raciais",
+        f"{PREFIXO_MODELO}notícia sobre a importância da proteção ambiental e demarcação de terras indígenas",
+        f"{PREFIXO_MODELO}texto que defende a descriminalização das drogas e a manutenção do estado laico"
     ]
 }
 
