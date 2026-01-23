@@ -2,55 +2,62 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 from urllib.parse import urljoin
+import re
 from scraper.content_extractor import extrair_primeiro_paragrafo
 
 def coletar_brasil_de_fato():
-    """
-    Scraper refinado para Brasil de Fato usando estrutura Elementor (2026).
-    """
     BASE_URL = "https://www.brasildefato.com.br/politica"
-    HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    # User-Agent mais completo para evitar bloqueios de segurança
+    HEADERS = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+    }
     noticias_coletadas = []
 
     try:
-        response = requests.get(BASE_URL, headers=HEADERS, timeout=15)
+        response = requests.get(BASE_URL, headers=HEADERS, timeout=20)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
 
-        # O padrão do seu HTML mostra que cada notícia é um 'e-loop-item'
-        itens_loop = soup.find_all('div', class_='e-loop-item')
+        # ESTRATÉGIA REFINADA: 
+        # Em vez de buscar o div 'e-loop-item', vamos buscar todos os H2 
+        # que contenham a classe 'elementor-heading-title', que vimos no seu HTML.
+        manchetes = soup.find_all('h2', class_=re.compile("elementor-heading-title"))
 
+        if not manchetes:
+            # Fallback: Busca qualquer link que tenha o padrão de data do BdF (/2026/01/...)
+            manchetes = [a.parent for a in soup.find_all('a', href=re.compile(r'/\d{4}/\d{2}/\d{2}/'))]
+
+        urls_vistas = set()
         count = 0
-        for item in itens_loop:
+        
+        for tag in manchetes:
             if count >= 10: break
 
-            try:
-                # 1. Busca o título e link dentro da classe padrão do Elementor
-                # O seu HTML mostra: <h2 class="elementor-heading-title"><a href="...">Título</a></h2>
-                h2_titulo = item.find('h2', class_='elementor-heading-title')
-                if not h2_titulo: continue
+            # Busca o <a> dentro ou próximo à tag encontrada
+            link_tag = tag.find('a') if tag.name != 'a' else tag
+            
+            if link_tag and link_tag.get('href'):
+                href = link_tag.get('href')
+                link_completo = urljoin(BASE_URL, href)
                 
-                link_tag = h2_titulo.find('a')
-                if not link_tag: continue
-
-                titulo = link_tag.text.strip()
-                link_completo = urljoin(BASE_URL, link_tag.get('href'))
-
-                # 2. Evita links repetidos ou institucionais
-                if not titulo or "aniversario" in link_completo.lower():
+                # Limpeza: evita links repetidos, de categorias ou institucionais
+                if link_completo in urls_vistas or "/editoria/" in link_completo or "doar" in link_completo:
                     continue
+                
+                titulo = link_tag.get_text().strip()
+                if len(titulo) < 10: continue # Pula títulos muito curtos/ruídos
 
-                # 3. DEEP SCRAPING: Busca o lead da notícia
-                print(f"   [BdF] Lendo lead: {titulo[:40]}...")
+                print(f"   [BdF] Processando: {titulo[:50]}...")
+                
+                # DEEP SCRAPING
                 conteudo_lead = extrair_primeiro_paragrafo(link_completo)
-
-                # 4. Construção do texto para a IA (Título + Contexto)
+                
                 if conteudo_lead:
                     texto_analise_ia = f"{titulo}. {conteudo_lead}"
                 else:
-                    # Se falhar o deep scraping, tentamos pegar qualquer texto curto no card
-                    resumo_fallback = item.get_text(separator=" ", strip=True).replace(titulo, "")[:200]
-                    texto_analise_ia = f"{titulo}. {resumo_fallback}"
+                    # Se não conseguir ler o conteúdo, tenta pegar o texto ao redor do link na home
+                    texto_analise_ia = titulo
 
                 noticias_coletadas.append({
                     "nome_fonte": "Brasil de Fato",
@@ -61,15 +68,13 @@ def coletar_brasil_de_fato():
                     "id_cluster": None,
                     "data_coleta": datetime.now().isoformat()
                 })
+                
+                urls_vistas.add(link_completo)
                 count += 1
 
-            except Exception as e_item:
-                print(f"⚠️ Erro no item BdF: {e_item}")
-                continue
-
-        print(f"✅ Brasil de Fato: {len(noticias_coletadas)} notícias processadas.")
+        print(f"✅ Brasil de Fato: {len(noticias_coletadas)} notícias coletadas.")
         return noticias_coletadas
 
     except Exception as e:
-        print(f"❌ Erro fatal no scraper BdF: {e}")
+        print(f"❌ Erro fatal no Brasil de Fato: {e}")
         return []
