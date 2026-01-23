@@ -10,7 +10,7 @@ try:
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
 
-def coletar_brasil_de_fato_home():
+def coletar_brasil_de_fato():
     if not PLAYWRIGHT_AVAILABLE:
         print("⚠️ [BdF] Playwright não disponível.")
         return []
