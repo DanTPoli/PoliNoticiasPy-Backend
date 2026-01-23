@@ -37,7 +37,7 @@ def extrair_primeiro_paragrafo(url, html_content=None):
                 
                 # FILTRO DE RUÍDO: Ignora parágrafos institucionais
                 blacklist = ["Todos os conteúdos", "direitos reservados", "assinante", 
-    "Leia também", "Clique aqui", "Verifying you are human", "Cloudflare"]
+    "Leia também", "Clique aqui", "Verifying you are human", "Cloudflare", "Verify you are human", "completing the action", "Turnstile" ]
                 if any(termo in texto for termo in blacklist) or len(texto) < 45:
                     continue
                 
