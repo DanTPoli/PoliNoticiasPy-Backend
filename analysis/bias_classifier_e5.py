@@ -78,7 +78,7 @@ def classificar_vies_e5(text, nome_fonte):
     
     raw_diff = sim_dir - sim_esq
     
-    ai_score = raw_diff * 100 
+    ai_score = raw_diff * 80 
     ai_score = max(-3.0, min(3.0, ai_score))
 
     source_score = SOURCE_BIAS_MAP.get(nome_fonte, 0.0)
