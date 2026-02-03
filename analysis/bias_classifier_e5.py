@@ -38,24 +38,24 @@ SOURCE_BIAS_MAP = {
 # --- 2. ÂNCORAS SEMÂNTICAS ---
 POLARITY_PHRASES = {
     "direita": [
-        f"{PREFIXO_MODELO}artigo que defende o livre mercado, o estado mínimo e as privatizações",
-        f"{PREFIXO_MODELO}texto focado na redução de impostos e na desburocratização para empresas",
-        f"{PREFIXO_MODELO}conteúdo que exalta a responsabilidade fiscal, o teto de gastos e a meritocracia",
+        f"{PREFIXO_MODELO}notícia que defende o livre mercado, o estado mínimo e as privatizações",
+        f"{PREFIXO_MODELO}notícia focada na redução de impostos e na desburocratização para empresas",
+        f"{PREFIXO_MODELO}notícia que exalta a responsabilidade fiscal, o teto de gastos e a meritocracia",
         f"{PREFIXO_MODELO}notícia com críticas ao assistencialismo estatal e defesa do empreendedorismo",
-        f"{PREFIXO_MODELO}texto que valoriza a família tradicional e os valores cristãos",
-        f"{PREFIXO_MODELO}artigo que apoia a segurança pública rigorosa, o armamento e o combate ao crime",
-        f"{PREFIXO_MODELO}conteúdo que exalta o patriotismo e a soberania nacional contra o globalismo",
-        f"{PREFIXO_MODELO}texto em defesa da liberdade religiosa e com posicionamento contrário ao aborto"
+        f"{PREFIXO_MODELO}notícia que valoriza a família tradicional e os valores cristãos",
+        f"{PREFIXO_MODELO}notícia que apoia a segurança pública rigorosa, o armamento e o combate ao crime",
+        f"{PREFIXO_MODELO}notícia que exalta o patriotismo e a soberania nacional contra o globalismo",
+        f"{PREFIXO_MODELO}notícia em defesa da liberdade religiosa e com posicionamento contrário ao aborto"
     ],
     "esquerda": [
-        f"{PREFIXO_MODELO}artigo que defende o fortalecimento do estado e dos serviços públicos estatais",
-        f"{PREFIXO_MODELO}texto focado na distribuição de renda e na taxação de grandes fortunas",
+        f"{PREFIXO_MODELO}notícia que defende o fortalecimento do estado e dos serviços públicos estatais",
+        f"{PREFIXO_MODELO}notícia focada na distribuição de renda e na taxação de grandes fortunas",
         f"{PREFIXO_MODELO}notícia que reivindica direitos trabalhistas e a valorização do salário mínimo",
-        f"{PREFIXO_MODELO}conteúdo que apoia a reforma agrária e a função social da propriedade",
-        f"{PREFIXO_MODELO}texto em defesa dos direitos humanos, das minorias e dos movimentos sociais",
-        f"{PREFIXO_MODELO}artigo que promove políticas de inclusão, diversidade e cotas raciais",
+        f"{PREFIXO_MODELO}notícia que apoia a reforma agrária e a função social da propriedade",
+        f"{PREFIXO_MODELO}notícia em defesa dos direitos humanos, das minorias e dos movimentos sociais",
+        f"{PREFIXO_MODELO}notícia que promove políticas de inclusão, diversidade e cotas raciais",
         f"{PREFIXO_MODELO}notícia sobre a importância da proteção ambiental e demarcação de terras indígenas",
-        f"{PREFIXO_MODELO}texto que defende a descriminalização das drogas e a manutenção do estado laico"
+        f"{PREFIXO_MODELO}notícia que defende a descriminalização das drogas e a manutenção do estado laico"
     ]
 }
 
@@ -78,12 +78,12 @@ def classificar_vies_e5(text, nome_fonte):
     
     raw_diff = sim_dir - sim_esq
     
-    ai_score = raw_diff * 110 #Era 110 
+    ai_score = raw_diff * 50 #Era 110 
     ai_score = max(-3.0, min(3.0, ai_score))
 
     source_score = SOURCE_BIAS_MAP.get(nome_fonte, 0.0)
     
-    final_score = (ai_score * 0.7) + (source_score * 0.3)
+    final_score = (ai_score * 1) + (source_score * 1)
     
     return float(round(final_score, 2))
 
