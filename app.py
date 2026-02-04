@@ -8,6 +8,8 @@ from operator import itemgetter
 import certifi
 import re
 
+from datetime import datetime, timezone
+
 # --- 1. CONFIGURAÇÃO ---
 load_dotenv() 
 MONGO_URI = os.getenv("MONGO_URI") 
@@ -20,6 +22,7 @@ try:
     client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
     db = client.polinoticias_db 
     noticias_collection = db.noticias_raw
+    usuarios_collection = db.usuarios_perfil
     print("API: Conectada com sucesso.")
 except Exception as e:
     print(f"API: Falha na conexão! {e}")
@@ -122,6 +125,36 @@ def get_feed_agrupado():
     except Exception as e:
         print(f"Erro: {e}")
         return jsonify({"error": str(e)}), 500
+    
+# --- ROTA DOS USERS ---
+
+@app.route('/api/user/clique', methods=['POST'])
+def registrar_clique():
+    data = request.json
+    uid = data.get('uid')
+    vies_valor = data.get('vies')
+
+    if not uid or vies_valor is None:
+        return jsonify({"error": "Dados incompletos"}), 400
+
+    try:
+        usuarios_collection.update_one(
+            {"uid": uid},
+            {
+                "$inc": {
+                    "vies_soma": vies_valor,
+                    "total_cliques": 1
+                },
+                "$set": {
+                    "ultima_atividade": datetime.now(timezone.utc)
+                }
+            },
+            upsert=True
+        )
+        return jsonify({"status": "sucesso"}), 200
+    except Exception as e:
+        print(f"Erro no Mongo: {e}")
+        return jsonify({"error": "Falha no banco de dados"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
