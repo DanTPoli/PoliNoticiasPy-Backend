@@ -4,7 +4,7 @@ __pycache__/
 *.pyc
 
 # Arquivos de Chave Secreta
-.env  # OBRIGATÓRIO: Contém a MONGO_URI
+.env  
 
 # Arquivos do Playwright
 /ms-playwright/
