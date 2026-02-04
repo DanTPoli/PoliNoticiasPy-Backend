@@ -11,3 +11,4 @@ torch
 transformers
 certifi
 schedule
+sentence_transformers
