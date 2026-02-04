@@ -126,7 +126,7 @@ def get_feed_agrupado():
         print(f"Erro: {e}")
         return jsonify({"error": str(e)}), 500
     
-# --- ROTA DOS USERS ---
+# --- ROTA DE ESCRITA USERS ---
 
 @app.route('/api/user/clique', methods=['POST'])
 def registrar_clique():
@@ -171,6 +171,29 @@ def registrar_clique():
         return jsonify({"status": "sucesso", "nova_media": nova_media}), 200
     except Exception as e:
         print(f"Erro no Mongo: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# --- ROTA DE LEITURA USERS ---   
+
+@app.route('/api/user/stats/<uid>', methods=['GET'])
+def get_user_stats(uid):
+    if usuarios_collection is None:
+        return jsonify({"error": "Banco de dados offline"}), 500
+
+    try:
+        # Busca o perfil do usuário pelo UID único
+        usuario = usuarios_collection.find_one({"uid": uid}, {"_id": 0})
+        
+        if not usuario:
+            return jsonify({
+                "vies_medio": 0,
+                "total_cliques": 0,
+                "frequencia_fontes": {},
+                "mensagem": "Nenhum dado encontrado ainda."
+            }), 200
+
+        return jsonify(usuario), 200
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
