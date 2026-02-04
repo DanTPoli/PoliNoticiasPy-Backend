@@ -132,29 +132,46 @@ def get_feed_agrupado():
 def registrar_clique():
     data = request.json
     uid = data.get('uid')
-    vies_valor = data.get('vies')
+    vies_novo = data.get('vies')
+    fonte = data.get('fonte')
 
-    if not uid or vies_valor is None:
+    if not uid or vies_novo is None or not fonte:
         return jsonify({"error": "Dados incompletos"}), 400
 
+    fonte_limpa = fonte.replace(".", "_")
+
     try:
+        # 1. Buscamos o estado atual do usuário para o cálculo
+        usuario = usuarios_collection.find_one({"uid": uid})
+        
+        if usuario:
+            n = usuario.get("total_cliques", 0)
+            media_antiga = usuario.get("vies_medio", 0)
+            # Cálculo da média móvel
+            nova_media = ((media_antiga * n) + vies_novo) / (n + 1)
+        else:
+            # Primeiro acesso do usuário
+            nova_media = vies_novo
+
+        # 2. Update atômico no MongoDB
         usuarios_collection.update_one(
             {"uid": uid},
             {
-                "$inc": {
-                    "vies_soma": vies_valor,
-                    "total_cliques": 1
-                },
                 "$set": {
+                    "vies_medio": round(nova_media, 4), # Salva a média móvel
                     "ultima_atividade": datetime.now(timezone.utc)
+                },
+                "$inc": {
+                    "total_cliques": 1,
+                    f"frequencia_fontes.{fonte_limpa}": 1 # Frequência de acessos
                 }
             },
             upsert=True
         )
-        return jsonify({"status": "sucesso"}), 200
+        return jsonify({"status": "sucesso", "nova_media": nova_media}), 200
     except Exception as e:
         print(f"Erro no Mongo: {e}")
-        return jsonify({"error": "Falha no banco de dados"}), 500
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
