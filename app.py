@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 from pymongo import MongoClient
 from bson.json_util import dumps
 from operator import itemgetter 
@@ -12,6 +13,7 @@ load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI") 
 
 app = Flask(__name__)
+CORS(app)
 
 try:
     # Conexão segura com certificado SSL
