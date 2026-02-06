@@ -24,7 +24,7 @@ MODEL_NAME = 'intfloat/multilingual-e5-large'
 PREFIXO_MODELO = "passage: "
 
 # Threshold calibrado (0.945 é bem rigoroso, ideal para linkage='complete')
-SIMILARITY_THRESHOLD = 0.91
+SIMILARITY_THRESHOLD = 0.92
 
 print(f"Carregando modelo de clusterização: {MODEL_NAME}...")
 model = SentenceTransformer(MODEL_NAME)
