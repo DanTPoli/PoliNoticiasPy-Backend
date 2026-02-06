@@ -24,6 +24,7 @@ try:
     noticias_collection = db.noticias_raw
     usuarios_collection = db.usuarios_perfil
     feedbacks_collection = db.feedbacks
+    notificacoes_collection = db.notificacoes
     print("API: Conectada com sucesso.")
 except Exception as e:
     print(f"API: Falha na conexão! {e}")
@@ -228,6 +229,27 @@ def listar_feedbacks():
         # pode ter problemas. Podemos converter para string ou usar o dumps do BSON.
         return app.response_class(
             response=dumps(feedbacks),
+            status=200,
+            mimetype='application/json'
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/notificacao-admin', methods=['GET'])
+def get_notificacao_admin():
+    try:
+        # Busca a mais recente (data desc) que esteja ativa
+        notificacao = notificacoes_collection.find_one(
+            {"ativa": True}, 
+            {"_id": 0}, 
+            sort=[("data_criacao", -1)]
+        )
+        
+        if not notificacao:
+            return jsonify(None), 200
+            
+        return app.response_class(
+            response=dumps(notificacao),
             status=200,
             mimetype='application/json'
         )
