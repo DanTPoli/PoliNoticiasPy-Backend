@@ -23,6 +23,7 @@ try:
     db = client.polinoticias_db 
     noticias_collection = db.noticias_raw
     usuarios_collection = db.usuarios_perfil
+    feedbacks_collection = db.feedbacks
     print("API: Conectada com sucesso.")
 except Exception as e:
     print(f"API: Falha na conexão! {e}")
@@ -193,6 +194,43 @@ def get_user_stats(uid):
             }), 200
 
         return jsonify(usuario), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+# --- ROTA DE FEEDBACK (ANÔNIMO) ---
+
+@app.route('/api/feedback', methods=['POST'])
+def enviar_feedback():
+    data = request.json
+    conteudo = data.get('conteudo')
+
+    if not conteudo:
+        return jsonify({"error": "A mensagem não pode estar vazia"}), 400
+
+    try:
+        feedbacks_collection.insert_one({
+            "conteudo": conteudo,
+            "data_criacao": datetime.now(timezone.utc)
+        })
+        return jsonify({"status": "sucesso", "message": "Feedback registrado"}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/feedback', methods=['GET'])
+def listar_feedbacks():
+    try:
+        # Busca os 10 mais recentes, excluindo o _id para facilitar o JSON
+        feedbacks = list(feedbacks_collection.find({}, {"_id": 0})
+                         .sort("data_criacao", -1)
+                         .limit(10))
+        
+        # Como o campo data_criacao é um objeto datetime, o jsonify do Flask 
+        # pode ter problemas. Podemos converter para string ou usar o dumps do BSON.
+        return app.response_class(
+            response=dumps(feedbacks),
+            status=200,
+            mimetype='application/json'
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
