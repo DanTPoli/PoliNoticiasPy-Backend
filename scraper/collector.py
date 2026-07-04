@@ -84,12 +84,15 @@ def rodar_coleta_completa():
     ]
 
     todas_as_noticias = []
+    urls_vistas = set()
     
     for funcao_coleta in funcoes_coleta:
         print(f"\nIniciando coleta em: {funcao_coleta.__name__}")
         try:
-            novas_noticias = funcao_coleta()
-            todas_as_noticias.extend(novas_noticias)
+            for noticia in funcao_coleta():
+                if noticia["url"] not in urls_vistas:
+                    urls_vistas.add(noticia["url"])
+                    todas_as_noticias.append(noticia)
         except Exception as e:
             print(f"❌ Erro fatal na função {funcao_coleta.__name__}: {e}")
 
