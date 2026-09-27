@@ -1,68 +1,111 @@
-import requests
-from bs4 import BeautifulSoup
 from datetime import datetime
-# Importa a função que lê o conteúdo real da página
-from scraper.content_extractor import extrair_primeiro_paragrafo
+import time 
+
+# --- BLINDAGEM CONTRA FALTA DE PLAYWRIGHT ---
+try:
+    from playwright.sync_api import sync_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
 
 def coletar_estadao():
     """
-    Coleta notícias do Estadão com Deep Scraping (lê o conteúdo do link).
+    Coleta notícias do Estadão com Playwright, blindado contra links duplicados.
     """
+    if not PLAYWRIGHT_AVAILABLE:
+        print("⚠️ [Estadão] Playwright não detectado. Pulando fonte.")
+        return []
+
     BASE_URL = "https://www.estadao.com.br/politica/" 
-    HEADERS = {'User-Agent': 'Mozilla/5.0'}
     noticias_coletadas = []
     
     try:
-        response = requests.get(BASE_URL, headers=HEADERS, timeout=15)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
-
-        # 1. IDENTIFICANDO OS BLOCOS CHAVE
-        blocos_noticia = soup.find_all('div', class_=lambda c: c and 'noticia-single-block' in c) 
-
-        count = 0
-
-        for bloco in blocos_noticia:
-            if count >= 8: break
-
-            # 2. EXTRAINDO LINK E TÍTULO
-            link_tag = bloco.find('a', href=True)
-            titulo_tag = bloco.find('h2', class_='headline')
-            # O resumo da capa (subheadline) serve como fallback
-            resumo_capa_tag = bloco.find('div', class_='subheadline')
-
-            if link_tag and titulo_tag:
-                link = link_tag.get('href')
-                titulo = titulo_tag.text.strip()
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                java_script_enabled=False 
+            )
+            page = context.new_page()
+            
+            print(f"   [Estadão] Acessando Home via Playwright...")
+            page.goto(BASE_URL, timeout=60000, wait_until="domcontentloaded")
+            
+            links_para_visitar = []
+            seen_urls = set()
+            seen_titles = set() # <-- NOVO: Verifica também o título
+            
+            try:
+                elementos = page.query_selector_all('.headline') 
                 
-                # --- DEEP SCRAPING ---
-                print(f"   [Estadão] Lendo conteúdo: {titulo[:30]}...")
-                conteudo_real = extrair_primeiro_paragrafo(link)
+                for el in elementos:
+                    if len(links_para_visitar) >= 8: break
+                    
+                    titulo = el.inner_text().strip()
+                    
+                    url = el.get_attribute('href')
+                    if not url:
+                        link_el = el.query_selector('xpath=ancestor::a')
+                        if link_el:
+                            url = link_el.get_attribute('href')
+                            
+                    if not url or len(titulo) < 10: continue
+                    
+                    # --- NOVO: Limpeza pesada na URL ---
+                    # Corta parâmetros de rastreio (?) e âncoras da página (#)
+                    url_limpa = url.split('?')[0].split('#')[0]
+                    # Remove barra no final para padronizar
+                    url_limpa = url_limpa.rstrip('/')
+                    
+                    if url_limpa.startswith('/'):
+                        url_limpa = f"https://www.estadao.com.br{url_limpa}"
+                        
+                    if "busca" in url_limpa or "autor" in url_limpa or "em-alta" in url_limpa: continue
+                    
+                    # Se a URL ou o Título já estiverem na lista, pula para o próximo!
+                    if url_limpa in seen_urls or titulo in seen_titles: 
+                        continue
+                    
+                    seen_urls.add(url_limpa)
+                    seen_titles.add(titulo)
+                    links_para_visitar.append({'url': url_limpa, 'titulo': titulo})
+                        
+            except Exception as e:
+                print(f"   [Estadão] Erro ao listar: {e}")
 
-                if conteudo_real:
-                    texto_analise_ia = f"{titulo}. {conteudo_real}"
-                else:
-                    # Fallback: Se não conseguir ler o artigo, usa o resumo da capa
-                    resumo = resumo_capa_tag.text.strip() if resumo_capa_tag else ""
-                    texto_analise_ia = f"{titulo}. {resumo}"
-                
-                noticias_coletadas.append({
-                    "nome_fonte": "Estadão",
-                    "titulo": titulo,
-                    "url": link,
-                    "texto_analise_ia": texto_analise_ia,
-                    "viés_classificado": None,
-                    "id_cluster": None,
-                    "data_coleta": datetime.now().isoformat()
-                })
-                count += 1
-        
-        print(f"Estadão: {len(noticias_coletadas)} notícias coletadas com conteúdo profundo.")
+            # Visita cada notícia
+            for item in links_para_visitar:
+                print(f"   [Estadão] Lendo conteúdo: {item['titulo'][:30]}...")
+                try:
+                    page.goto(item['url'], timeout=30000, wait_until="domcontentloaded")
+                    
+                    conteudo = ""
+                    paragrafo = page.query_selector('.news-body p, article p, .story-content p')
+                    
+                    if paragrafo:
+                        conteudo = paragrafo.inner_text().strip()
+                    
+                    texto_ia = f"{item['titulo']}. {conteudo}" if conteudo else item['titulo']
+                    
+                    noticias_coletadas.append({
+                        "nome_fonte": "Estadão",
+                        "titulo": item['titulo'],
+                        "url": item['url'],
+                        "texto_analise_ia": texto_ia,
+                        "viés_classificado": None,
+                        "id_cluster": None,
+                        "data_coleta": datetime.now().isoformat()
+                    })
+                    time.sleep(1)
+                    
+                except Exception as e:
+                    print(f"   ⚠️ Falha ao ler artigo Estadão: {e}")
+
+            browser.close()
+            
+        print(f"Estadão: {len(noticias_coletadas)} notícias coletadas com sucesso.")
         return noticias_coletadas
 
-    except requests.RequestException as e:
-        print(f"Erro ao coletar Estadão: {e}")
-        return []
     except Exception as e:
-        print(f"Erro inesperado no scraping do Estadão: {e}")
+        print(f"Erro Crítico no Playwright do Estadão: {e}")
         return []

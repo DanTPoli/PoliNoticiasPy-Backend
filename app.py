@@ -25,6 +25,7 @@ try:
     usuarios_collection = db.usuarios_perfil
     feedbacks_collection = db.feedbacks
     notificacoes_collection = db.notificacoes
+    app_configs_collection = db.app_configs
     print("API: Conectada com sucesso.")
 except Exception as e:
     print(f"API: Falha na conexão! {e}")
@@ -234,6 +235,28 @@ def listar_feedbacks():
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/configuracoes', methods=['GET'])
+def get_configuracoes():
+    try:
+        # Busca o documento fixo de configurações gerais
+        config = app_configs_collection.find_one(
+            {"tipo": "config_geral"}, 
+            {"_id": 0} # Exclui o ObjectId da resposta
+        )
+        
+        # Caso a coleção esteja vazia, retorna um valor seguro por padrão (Fallback)
+        if not config:
+            return jsonify({"mostrar_vies": False}), 200
+            
+        return app.response_class(
+            response=dumps(config),
+            status=200,
+            mimetype='application/json'
+        )
+    except Exception as e:
+        # Em caso de erro do banco, optamos por um fallback seguro em vez de quebrar a app
+        return jsonify({"mostrar_vies": False, "error": str(e)}), 500
     
 @app.route('/api/notificacao-admin', methods=['GET'])
 def get_notificacao_admin():
